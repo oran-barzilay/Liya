@@ -4,16 +4,85 @@
 
 :root {
   color-scheme: dark;
+  /* Default accent: indigo */
+  --accent-300: 165 180 252;
+  --accent-400: 129 140 248;
+  --accent-500: 99 102 241;
+  --accent-600: 79 70 229;
+  --accent-700: 67 56 202;
+  --accent-800: 55 48 163;
+  --accent-900: 49 46 129;
+  --accent-950: 30 27 75;
+}
+
+[data-accent="purple"] {
+  --accent-300: 216 180 254;
+  --accent-400: 192 132 252;
+  --accent-500: 168 85 247;
+  --accent-600: 147 51 234;
+  --accent-700: 126 34 206;
+  --accent-800: 107 33 168;
+  --accent-900: 88 28 135;
+  --accent-950: 59 7 100;
+}
+
+[data-accent="blue"] {
+  --accent-300: 147 197 253;
+  --accent-400: 96 165 250;
+  --accent-500: 59 130 246;
+  --accent-600: 37 99 235;
+  --accent-700: 29 78 216;
+  --accent-800: 30 64 175;
+  --accent-900: 30 58 138;
+  --accent-950: 23 37 84;
+}
+
+[data-accent="emerald"] {
+  --accent-300: 110 231 183;
+  --accent-400: 52 211 153;
+  --accent-500: 16 185 129;
+  --accent-600: 5 150 105;
+  --accent-700: 4 120 87;
+  --accent-800: 6 95 70;
+  --accent-900: 6 78 59;
+  --accent-950: 2 44 34;
+}
+
+[data-accent="rose"] {
+  --accent-300: 253 164 175;
+  --accent-400: 251 113 133;
+  --accent-500: 244 63 94;
+  --accent-600: 225 29 72;
+  --accent-700: 190 18 60;
+  --accent-800: 159 18 57;
+  --accent-900: 136 19 55;
+  --accent-950: 76 5 25;
+}
+
+[data-accent="amber"] {
+  --accent-300: 252 211 77;
+  --accent-400: 251 191 36;
+  --accent-500: 245 158 11;
+  --accent-600: 217 119 6;
+  --accent-700: 180 83 9;
+  --accent-800: 146 64 14;
+  --accent-900: 120 53 15;
+  --accent-950: 69 26 3;
 }
 
 body {
   margin: 0;
-  font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+  font-family: Heebo, system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+}
+
+/* RTL-aware scroll */
+html[dir="rtl"] * {
+  letter-spacing: 0;
 }
 
 @layer components {
   .input-base {
-    @apply bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500;
+    @apply bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-accent-500;
   }
 }
 

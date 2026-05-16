@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { useTasks } from "../hooks/useTasks";
 import { useInventory } from "../hooks/useInventory";
 import { useTransactions } from "../hooks/useFinance";
@@ -53,6 +54,14 @@ export default function Dashboard() {
   );
   const nextAppt = appointments[0];
   const balance = totals.income - totals.expenses;
+
+  const [copied, setCopied] = useState(false);
+  const copyHouseholdId = () => {
+    if (!profile?.household_id) return;
+    navigator.clipboard.writeText(profile.household_id);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
 
   return (
     <div>
@@ -163,6 +172,30 @@ export default function Dashboard() {
               </div>
             ))}
           </div>
+        </section>
+      )}
+
+      {/* Household ID sharing — for inviting Linoy */}
+      {profile?.household_id && (
+        <section className="mt-8">
+          <h3 className="text-sm font-semibold mb-2 text-slate-400 uppercase tracking-wide">
+            🔗 Invite to household
+          </h3>
+          <div className="bg-slate-900 border border-slate-800 rounded-xl px-4 py-3 flex items-center gap-3">
+            <div className="flex-1 min-w-0">
+              <div className="text-xs text-slate-500 mb-0.5">Household ID (share with Linoy)</div>
+              <code className="text-xs text-slate-300 font-mono break-all">{profile.household_id}</code>
+            </div>
+            <button
+              onClick={copyHouseholdId}
+              className={"shrink-0 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors " + (copied ? "bg-emerald-700 text-white" : "bg-slate-700 hover:bg-slate-600 text-slate-300")}
+            >
+              {copied ? "✓ Copied!" : "Copy"}
+            </button>
+          </div>
+          <p className="text-xs text-slate-500 mt-1.5">
+            Linoy signs up with "Create account", then picks "Join existing" and pastes this ID.
+          </p>
         </section>
       )}
     </div>

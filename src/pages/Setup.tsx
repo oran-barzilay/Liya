@@ -6,48 +6,72 @@ import { useQueryClient } from "@tanstack/react-query";
 export default function Setup() {
   const { user } = useAuth();
   const qc = useQueryClient();
+  const [mode, setMode] = useState<"create" | "join">("create");
   const [displayName, setDisplayName] = useState("");
   const [householdName, setHouseholdName] = useState("Our Home");
+  const [joinCode, setJoinCode] = useState(""); // household ID to join
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
-  const handleSetup = async (e: React.FormEvent) => {
+  const createHousehold = async () => {
+    if (!user) return;
+    const { data: household, error: hErr } = await supabase
+      .from("households")
+      .insert({ name: householdName })
+      .select()
+      .single();
+    if (hErr) throw hErr;
+
+    const { error: uErr } = await supabase.from("users").insert({
+      id: user.id,
+      household_id: household.id,
+      display_name: displayName || user.email?.split("@")[0] || "User",
+      role: "owner",
+    });
+    if (uErr) throw uErr;
+
+    // Seed default finance categories
+    await supabase.from("categories").insert([
+      { household_id: household.id, transaction_type: "income",  name: "Salary",         is_system: true },
+      { household_id: household.id, transaction_type: "income",  name: "Freelance",       is_system: true },
+      { household_id: household.id, transaction_type: "expense", name: "Groceries",       is_system: true },
+      { household_id: household.id, transaction_type: "expense", name: "Rent / Mortgage", is_system: true },
+      { household_id: household.id, transaction_type: "expense", name: "Baby & Kids",     is_system: true },
+      { household_id: household.id, transaction_type: "expense", name: "Health",          is_system: true },
+      { household_id: household.id, transaction_type: "expense", name: "Transport",       is_system: true },
+      { household_id: household.id, transaction_type: "expense", name: "Entertainment",   is_system: true },
+      { household_id: household.id, transaction_type: "expense", name: "Other",           is_system: true },
+    ]);
+  };
+
+  const joinHousehold = async () => {
+    if (!user) return;
+    const hid = joinCode.trim();
+    // Verify household exists
+    const { data: household, error: hErr } = await supabase
+      .from("households")
+      .select("id, name")
+      .eq("id", hid)
+      .single();
+    if (hErr || !household) throw new Error("Household not found. Check the ID and try again.");
+
+    const { error: uErr } = await supabase.from("users").insert({
+      id: user.id,
+      household_id: hid,
+      display_name: displayName || user.email?.split("@")[0] || "User",
+      role: "member",
+    });
+    if (uErr) throw uErr;
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!user) return;
     setLoading(true);
     setError("");
     try {
-      // Create household
-      const { data: household, error: hErr } = await supabase
-        .from("households")
-        .insert({ name: householdName })
-        .select()
-        .single();
-      if (hErr) throw hErr;
-
-      // Create user profile
-      const { error: uErr } = await supabase.from("users").insert({
-        id: user.id,
-        household_id: household.id,
-        display_name: displayName || user.email?.split("@")[0] || "User",
-        role: "owner",
-      });
-      if (uErr) throw uErr;
-
-      // Seed default finance categories
-      const categories = [
-        { household_id: household.id, transaction_type: "income", name: "Salary", is_system: true },
-        { household_id: household.id, transaction_type: "income", name: "Freelance", is_system: true },
-        { household_id: household.id, transaction_type: "expense", name: "Groceries", is_system: true },
-        { household_id: household.id, transaction_type: "expense", name: "Rent / Mortgage", is_system: true },
-        { household_id: household.id, transaction_type: "expense", name: "Baby & Kids", is_system: true },
-        { household_id: household.id, transaction_type: "expense", name: "Health", is_system: true },
-        { household_id: household.id, transaction_type: "expense", name: "Transport", is_system: true },
-        { household_id: household.id, transaction_type: "expense", name: "Entertainment", is_system: true },
-        { household_id: household.id, transaction_type: "expense", name: "Other", is_system: true },
-      ];
-      await supabase.from("categories").insert(categories);
-
+      if (mode === "create") await createHousehold();
+      else await joinHousehold();
       qc.invalidateQueries({ queryKey: ["profile", user.id] });
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Setup failed");
@@ -59,11 +83,33 @@ export default function Setup() {
     <div className="min-h-screen bg-slate-950 flex items-center justify-center px-4">
       <div className="w-full max-w-sm">
         <div className="text-center mb-8">
-          <h1 className="text-3xl font-bold text-indigo-400">Welcome 👋</h1>
-          <p className="text-slate-400 mt-2 text-sm">Let's set up your family household</p>
+          <div className="text-4xl mb-3">👋</div>
+          <h1 className="text-2xl font-bold text-white">Welcome to Family ERP</h1>
+          <p className="text-slate-400 mt-2 text-sm">
+            Signed in as <span className="text-indigo-400">{user?.email}</span>
+          </p>
         </div>
+
+        {/* Mode toggle */}
+        <div className="flex rounded-xl bg-slate-900 border border-slate-800 p-1 mb-4">
+          <button
+            type="button"
+            onClick={() => { setMode("create"); setError(""); }}
+            className={"flex-1 py-2 rounded-lg text-sm font-medium transition-colors " + (mode === "create" ? "bg-indigo-600 text-white" : "text-slate-400 hover:text-white")}
+          >
+            🏠 New household
+          </button>
+          <button
+            type="button"
+            onClick={() => { setMode("join"); setError(""); }}
+            className={"flex-1 py-2 rounded-lg text-sm font-medium transition-colors " + (mode === "join" ? "bg-indigo-600 text-white" : "text-slate-400 hover:text-white")}
+          >
+            🔗 Join existing
+          </button>
+        </div>
+
         <form
-          onSubmit={handleSetup}
+          onSubmit={handleSubmit}
           className="bg-slate-900 border border-slate-800 rounded-2xl p-6 space-y-4"
         >
           <div>
@@ -77,28 +123,53 @@ export default function Setup() {
               className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2.5 text-sm text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500"
             />
           </div>
-          <div>
-            <label className="block text-sm text-slate-300 mb-1.5">Household name</label>
-            <input
-              type="text"
-              required
-              value={householdName}
-              onChange={(e) => setHouseholdName(e.target.value)}
-              placeholder="Our Home"
-              className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2.5 text-sm text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-            />
-          </div>
+
+          {mode === "create" ? (
+            <div>
+              <label className="block text-sm text-slate-300 mb-1.5">Household name</label>
+              <input
+                type="text"
+                required
+                value={householdName}
+                onChange={(e) => setHouseholdName(e.target.value)}
+                placeholder="Barzilay Family"
+                className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2.5 text-sm text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              />
+              <p className="text-xs text-slate-500 mt-1.5">
+                Default categories and settings will be created automatically.
+              </p>
+            </div>
+          ) : (
+            <div>
+              <label className="block text-sm text-slate-300 mb-1.5">Household ID</label>
+              <input
+                type="text"
+                required
+                value={joinCode}
+                onChange={(e) => setJoinCode(e.target.value)}
+                placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+                className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2.5 text-sm text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500 font-mono"
+              />
+              <p className="text-xs text-slate-500 mt-1.5">
+                Ask the household owner (Oran) to share the Household ID from the Dashboard.
+              </p>
+            </div>
+          )}
+
           {error && (
             <p className="text-red-400 text-sm bg-red-950/50 border border-red-800 rounded-lg px-3 py-2">
-              {error}
+              ⚠️ {error}
             </p>
           )}
+
           <button
             type="submit"
             disabled={loading}
             className="w-full bg-indigo-600 hover:bg-indigo-500 disabled:opacity-60 text-white font-medium py-2.5 rounded-lg transition-colors text-sm"
           >
-            {loading ? "Creating…" : "Create household"}
+            {loading
+              ? "Setting up…"
+              : mode === "create" ? "Create household" : "Join household"}
           </button>
         </form>
       </div>

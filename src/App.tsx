@@ -1,52 +1,45 @@
-import { useUiStore } from "./state/stores/uiStore";
-import { hasSupabaseEnv } from "./lib/supabase";
+import { Routes, Route, Navigate } from "react-router-dom";
+import { useAuth } from "./contexts/AuthContext";
+import { useProfile } from "./hooks/useProfile";
+import Layout from "./components/Layout";
+import Login from "./pages/Login";
+import Setup from "./pages/Setup";
+import Dashboard from "./pages/Dashboard";
+import Tasks from "./pages/Tasks";
+import Inventory from "./pages/Inventory";
+import Baby from "./pages/Baby";
+import Finance from "./pages/Finance";
 
-function App() {
-  const { selectedDate, taskBoardView, showCompletedTasks, setTaskBoardView } =
-    useUiStore();
+function AppRoutes() {
+  const { user, loading: authLoading } = useAuth();
+  const { data: profile, isLoading: profileLoading } = useProfile();
+
+  if (authLoading || (user && profileLoading)) {
+    return (
+      <div className="min-h-screen bg-slate-950 flex items-center justify-center">
+        <div className="text-slate-400 text-sm animate-pulse">Loading…</div>
+      </div>
+    );
+  }
+
+  if (!user) return <Login />;
+  if (!profile) return <Setup />;
 
   return (
-    <main className="min-h-screen bg-slate-950 text-slate-100">
-      <section className="mx-auto max-w-4xl px-6 py-12">
-        <h1 className="text-3xl font-bold">Family ERP</h1>
-        <p className="mt-2 text-slate-300">
-          Architecture baseline is ready. Next step is wiring module-specific pages.
-        </p>
-
-        <div className="mt-6 rounded-xl border border-slate-800 bg-slate-900 p-4">
-          <h2 className="text-lg font-semibold">Runtime Status</h2>
-          <ul className="mt-3 space-y-2 text-sm text-slate-300">
-            <li>Selected date: {selectedDate}</li>
-            <li>Board view: {taskBoardView}</li>
-            <li>Show completed tasks: {showCompletedTasks ? "yes" : "no"}</li>
-            <li>Supabase env configured: {hasSupabaseEnv ? "yes" : "no"}</li>
-          </ul>
-
-          <div className="mt-4 flex gap-2">
-            <button
-              className="rounded bg-indigo-600 px-3 py-1.5 text-sm font-medium hover:bg-indigo-500"
-              onClick={() => setTaskBoardView("kanban")}
-            >
-              Kanban
-            </button>
-            <button
-              className="rounded bg-indigo-600 px-3 py-1.5 text-sm font-medium hover:bg-indigo-500"
-              onClick={() => setTaskBoardView("list")}
-            >
-              List
-            </button>
-            <button
-              className="rounded bg-indigo-600 px-3 py-1.5 text-sm font-medium hover:bg-indigo-500"
-              onClick={() => setTaskBoardView("timeline")}
-            >
-              Timeline
-            </button>
-          </div>
-        </div>
-      </section>
-    </main>
+    <Layout>
+      <Routes>
+        <Route path="/" element={<Dashboard />} />
+        <Route path="/tasks" element={<Tasks />} />
+        <Route path="/inventory" element={<Inventory />} />
+        <Route path="/baby" element={<Baby />} />
+        <Route path="/finance" element={<Finance />} />
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Routes>
+    </Layout>
   );
 }
 
-export default App;
+export default function App() {
+  return <AppRoutes />;
+}
 

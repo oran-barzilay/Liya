@@ -69,14 +69,24 @@ export default function Setup() {
     if (!user) return;
     setLoading(true);
     setError("");
-    try {
-      if (mode === "create") await createHousehold();
-      else await joinHousehold();
-      qc.invalidateQueries({ queryKey: ["profile", user.id] });
-    } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : "Setup failed");
-      setLoading(false);
-    }
+      try {
+          if (mode === "create") await createHousehold();
+          else await joinHousehold();
+          qc.invalidateQueries({ queryKey: ["profile", user.id] });
+        } catch (err: unknown) {
+          // Better error surface for Supabase/PostgREST errors (they are plain objects)
+          console.error("Setup error:", err);
+          let msg = "Setup failed";
+          if (err && typeof err === "object") {
+            // Common shapes: { message, msg, details, code }
+            // @ts-ignore
+            msg = err.message || err.msg || err.details || JSON.stringify(err);
+          } else if (typeof err === "string") {
+            msg = err;
+          }
+          setError(msg);
+          setLoading(false);
+        }
   };
 
   return (

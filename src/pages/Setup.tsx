@@ -15,53 +15,20 @@ export default function Setup() {
 
   const createHousehold = async () => {
     if (!user) return;
-    const { data: household, error: hErr } = await supabase
-      .from("households")
-      .insert({ name: householdName })
-      .select()
-      .single();
-    if (hErr) throw hErr;
-
-    const { error: uErr } = await supabase.from("users").insert({
-      id: user.id,
-      household_id: household.id,
-      display_name: displayName || user.email?.split("@")[0] || "User",
-      role: "owner",
+    const { error } = await supabase.rpc("create_household_with_owner", {
+      p_household_name: householdName,
+      p_display_name: displayName || user.email?.split("@")[0] || "User",
     });
-    if (uErr) throw uErr;
-
-    // Seed default finance categories
-    await supabase.from("categories").insert([
-      { household_id: household.id, transaction_type: "income",  name: "Salary",         is_system: true },
-      { household_id: household.id, transaction_type: "income",  name: "Freelance",       is_system: true },
-      { household_id: household.id, transaction_type: "expense", name: "Groceries",       is_system: true },
-      { household_id: household.id, transaction_type: "expense", name: "Rent / Mortgage", is_system: true },
-      { household_id: household.id, transaction_type: "expense", name: "Baby & Kids",     is_system: true },
-      { household_id: household.id, transaction_type: "expense", name: "Health",          is_system: true },
-      { household_id: household.id, transaction_type: "expense", name: "Transport",       is_system: true },
-      { household_id: household.id, transaction_type: "expense", name: "Entertainment",   is_system: true },
-      { household_id: household.id, transaction_type: "expense", name: "Other",           is_system: true },
-    ]);
+    if (error) throw error;
   };
 
   const joinHousehold = async () => {
     if (!user) return;
-    const hid = joinCode.trim();
-    // Verify household exists
-    const { data: household, error: hErr } = await supabase
-      .from("households")
-      .select("id, name")
-      .eq("id", hid)
-      .single();
-    if (hErr || !household) throw new Error("Household not found. Check the ID and try again.");
-
-    const { error: uErr } = await supabase.from("users").insert({
-      id: user.id,
-      household_id: hid,
-      display_name: displayName || user.email?.split("@")[0] || "User",
-      role: "member",
+    const { error } = await supabase.rpc("join_household", {
+      p_household_id: joinCode.trim(),
+      p_display_name: displayName || user.email?.split("@")[0] || "User",
     });
-    if (uErr) throw uErr;
+    if (error) throw error;
   };
 
   const handleSubmit = async (e: React.FormEvent) => {

@@ -106,6 +106,7 @@ export const THEME_PRESETS: Palette[] = [
 ];
 
 interface ThemeState {
+  appName: string;
   accentColor: AccentColor;
   accentCustom: string;
   menuBg: string;
@@ -113,6 +114,7 @@ interface ThemeState {
   textPrimary: string;
   textMuted: string;
   favoritePalettes: Palette[];
+  setAppName: (name: string) => void;
   setAccentColor: (color: AccentColor) => void;
   setAccentCustom: (hex: string) => void;
   setMenuBg: (hex: string) => void;
@@ -152,6 +154,7 @@ export function getContrastColor(bgHex: string): "light" | "dark" {
 export const useThemeStore = create<ThemeState>()(
   persist(
     (set, get) => ({
+      appName: "Fami",
       accentColor: "indigo",
       accentCustom: DEFAULT_CUSTOM,
       menuBg: DEFAULT_MENU_BG,
@@ -159,6 +162,7 @@ export const useThemeStore = create<ThemeState>()(
       textPrimary: DEFAULT_TEXT_PRIMARY,
       textMuted: DEFAULT_TEXT_MUTED,
       favoritePalettes: [],
+      setAppName: (appName) => set({ appName: appName.trim() || "Fami" }),
       setAccentColor: (accentColor) => set({ accentColor }),
       setAccentCustom: (accentCustom) =>
         set({ accentColor: "custom", accentCustom: normalizeHex(accentCustom, DEFAULT_CUSTOM) }),

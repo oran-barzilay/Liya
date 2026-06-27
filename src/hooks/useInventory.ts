@@ -42,10 +42,19 @@ export function useInventory() {
 
   const deleteItem = useMutation({
     mutationFn: async (id: string) => {
+      // Also delete related tasks (inventory restock tasks referencing this item)
+      await supabase.from("tasks")
+        .delete()
+        .eq("household_id", hid)
+        .eq("module", "inventory")
+        .like("description", `%${id}%`);
       const { error } = await supabase.from("inventory").delete().eq("id", id);
       if (error) throw error;
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: queryKeys.inventory(hid) }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: queryKeys.inventory(hid) });
+      qc.invalidateQueries({ queryKey: queryKeys.tasks(hid) });
+    },
   });
 
   return { ...query, upsertItem, deleteItem, profile };

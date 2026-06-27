@@ -15,7 +15,7 @@ const NAV_ITEMS = [
 export default function Layout({ children }: { children: React.ReactNode }) {
   const { user, signOut } = useAuth();
   const { data: profile } = useProfile();
-  const { menuBg, appBg, accentCustom, accentColor } = useThemeStore();
+  const { menuBg, appBg, accentCustom, accentColor, appName } = useThemeStore();
   const navigate = useNavigate();
 
   const menuContrast = getContrastColor(menuBg);
@@ -42,7 +42,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
       {/* Sidebar — appears on the right in RTL */}
       <aside className={`w-56 flex flex-col border-s ${menuBorder} shrink-0`} style={{ backgroundColor: menuBg }}>
         <div className={`px-5 py-5 border-b ${menuBorder}`}>
-          <h1 className={`text-2xl font-bold ${titleColor}`}>Fami</h1>
+          <h1 className={`text-2xl font-bold ${titleColor}`}>{appName}</h1>
           <p className={`text-xs mt-0.5 truncate ${menuTextMuted}`}>{profile?.display_name ?? user?.email ?? ""}</p>
         </div>
 

@@ -20,15 +20,20 @@ const PRIORITY_BADGE: Record<number, string> = {
 };
 const STATUSES = ["todo", "in_progress", "done"] as const;
 
-function TaskCard({ task, onStatusChange, onDelete }: { task: Task; onStatusChange: (s: string) => void; onDelete: () => void }) {
+function TaskCard({ task, onStatusChange, onDelete, onEdit }: { task: Task; onStatusChange: (s: string) => void; onDelete: () => void; onEdit: () => void }) {
   const nextStatus: Record<string, string> = { todo: "in_progress", in_progress: "done", done: "todo" };
   return (
     <div className="bg-slate-900 border border-slate-800 rounded-xl p-3 space-y-2 group">
       <div className="flex items-start justify-between gap-2">
         <span className="text-sm font-medium leading-snug text-theme">{task.title}</span>
-        <button onClick={onDelete} className="text-slate-600 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
-          <Icon name="trash" className="w-3.5 h-3.5" />
-        </button>
+        <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
+          <button onClick={onEdit} className="text-slate-600 hover:text-accent-400">
+            <Icon name="edit" className="w-3.5 h-3.5" />
+          </button>
+          <button onClick={onDelete} className="text-slate-600 hover:text-red-400">
+            <Icon name="trash" className="w-3.5 h-3.5" />
+          </button>
+        </div>
       </div>
       {task.description && <p className="text-xs text-theme-muted line-clamp-2">{task.description}</p>}
       <div className="flex items-center gap-2 flex-wrap">
@@ -146,11 +151,103 @@ function AddTaskModal({
   );
 }
 
+function EditTaskModal({ task, onClose, onSave, members }: {
+  task: Task;
+  onClose: () => void;
+  onSave: (t: Task) => void;
+  members: Array<{ id: string; display_name: string }>;
+}) {
+  const [title, setTitle] = useState(task.title ?? "");
+  const [priority, setPriority] = useState(String(task.priority_level ?? 3));
+  const [dueAt, setDueAt] = useState(task.due_at?.slice(0, 16) ?? "");
+  const [scheduledStart, setScheduledStart] = useState(task.scheduled_start_at?.slice(0, 16) ?? "");
+  const [desc, setDesc] = useState(task.description ?? "");
+  const [assignedTo, setAssignedTo] = useState(task.assigned_to ?? "");
+  const [status, setStatus] = useState(task.status ?? "todo");
+
+  return (
+    <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
+      <form
+        onSubmit={(e) => {
+          e.preventDefault();
+          onSave({
+            id: task.id,
+            title,
+            status,
+            priority_level: task.task_type === "priority" ? Number(priority) : task.priority_level,
+            due_at: dueAt || null,
+            scheduled_start_at: scheduledStart || null,
+            description: desc || null,
+            assigned_to: assignedTo || null,
+          });
+          onClose();
+        }}
+        className="bg-slate-900 border border-slate-700 rounded-2xl p-5 w-full max-w-md space-y-4"
+      >
+        <div className="flex items-center justify-between">
+          <h3 className="font-semibold text-theme">עריכת משימה</h3>
+          <button type="button" onClick={onClose} className="text-theme-muted hover:text-theme">
+            <Icon name="x" className="w-4 h-4" />
+          </button>
+        </div>
+        <div>
+          <label className="text-xs text-theme-muted block mb-1">כותרת *</label>
+          <input required value={title} onChange={(e) => setTitle(e.target.value)} className="input-base w-full" />
+        </div>
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label className="text-xs text-theme-muted block mb-1">סטטוס</label>
+            <select value={status} onChange={(e) => setStatus(e.target.value)} className="input-base w-full">
+              <option value="todo">לביצוע</option>
+              <option value="in_progress">בביצוע</option>
+              <option value="done">בוצע</option>
+            </select>
+          </div>
+          {task.task_type === "priority" && (
+            <div>
+              <label className="text-xs text-theme-muted block mb-1">עדיפות</label>
+              <select value={priority} onChange={(e) => setPriority(e.target.value)} className="input-base w-full">
+                {[1, 2, 3, 4, 5].map((p) => <option key={p} value={p}>P{p}</option>)}
+              </select>
+            </div>
+          )}
+        </div>
+        <div>
+          <label className="text-xs text-theme-muted block mb-1">אחראי</label>
+          <select value={assignedTo} onChange={(e) => setAssignedTo(e.target.value)} className="input-base w-full">
+            <option value="">ללא שיוך</option>
+            {members.map((m) => <option key={m.id} value={m.id}>{m.display_name}</option>)}
+          </select>
+        </div>
+        {task.task_type === "priority" ? (
+          <div>
+            <label className="text-xs text-theme-muted block mb-1">תאריך יעד</label>
+            <input type="datetime-local" value={dueAt} onChange={(e) => setDueAt(e.target.value)} className="input-base w-full" />
+          </div>
+        ) : (
+          <div>
+            <label className="text-xs text-theme-muted block mb-1">מועד מתוזמן</label>
+            <input type="datetime-local" value={scheduledStart} onChange={(e) => setScheduledStart(e.target.value)} className="input-base w-full" />
+          </div>
+        )}
+        <div>
+          <label className="text-xs text-theme-muted block mb-1">תיאור</label>
+          <textarea value={desc} onChange={(e) => setDesc(e.target.value)} rows={2} className="input-base w-full resize-none" />
+        </div>
+        <button type="submit" className="w-full bg-accent-600 hover:bg-accent-500 text-white font-medium py-2 rounded-lg text-sm transition-colors">
+          שמור שינויים
+        </button>
+      </form>
+    </div>
+  );
+}
+
 export default function Tasks() {
   const { data: tasks = [], createTask, updateTask, deleteTask, members = [] } = useTasks();
   const { taskBoardView, setTaskBoardView, selectedDate } = useUiStore();
   const [showModal, setShowModal] = useState(false);
   const [pendingDelete, setPendingDelete] = useState<string | null>(null);
+  const [editingTask, setEditingTask] = useState<Task | null>(null);
   const [filterType, setFilterType] = useState<"all" | "priority" | "time_sensitive">("all");
   const [filterAssignee, setFilterAssignee] = useState<string>("all");
 
@@ -175,7 +272,7 @@ export default function Tasks() {
             </div>
             <div className="space-y-2">
               {col.map((task) => (
-                <TaskCard key={task.id} task={task} onStatusChange={(s) => handleStatusChange(task.id, s)} onDelete={() => setPendingDelete(task.id)} />
+                <TaskCard key={task.id} task={task} onStatusChange={(s) => handleStatusChange(task.id, s)} onDelete={() => setPendingDelete(task.id)} onEdit={() => setEditingTask(task)} />
               ))}
             </div>
           </div>
@@ -209,6 +306,9 @@ export default function Tasks() {
             </div>
             {task.priority_level && <span className={"text-xs px-2 py-0.5 rounded-full font-medium " + PRIORITY_BADGE[task.priority_level]}>P{task.priority_level}</span>}
             {task.due_at && <span className="text-xs text-theme-muted hidden sm:block">{new Date(task.due_at).toLocaleDateString("he-IL")}</span>}
+            <button onClick={() => setEditingTask(task)} className="text-slate-600 hover:text-accent-400 transition-colors">
+              <Icon name="edit" className="w-3.5 h-3.5" />
+            </button>
             <button onClick={() => setPendingDelete(task.id)} className="text-slate-600 hover:text-red-400 transition-colors">
               <Icon name="trash" className="w-3.5 h-3.5" />
             </button>
@@ -299,6 +399,7 @@ export default function Tasks() {
       {taskBoardView === "list" && <ListView />}
       {taskBoardView === "timeline" && <TimelineView />}
       {showModal && <AddTaskModal onClose={() => setShowModal(false)} onAdd={(task) => createTask.mutate(task)} members={members as Array<{ id: string; display_name: string }>} />}
+      {editingTask && <EditTaskModal task={editingTask} onClose={() => setEditingTask(null)} onSave={(t) => updateTask.mutate(t)} members={members as Array<{ id: string; display_name: string }>} />}
 
       {pendingDelete && (
         <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4">

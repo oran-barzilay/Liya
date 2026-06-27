@@ -1,6 +1,5 @@
 import { useState, useMemo } from "react";
 import { useChildren, useBabyLogs, useAppointments } from "../hooks/useBaby";
-import { useProfile } from "../hooks/useProfile";
 import Icon from "../components/Icon";
 
 type Row = Record<string, any>;
@@ -277,8 +276,7 @@ function DailyCharts({ logs, days = 7 }: { logs: Row[]; days?: number }) {
 
 /* ─── Main Baby Component ─── */
 export default function Baby() {
-  const { data: children = [], addChild, deleteChild } = useChildren();
-  const { data: profile } = useProfile();
+  const { data: children = [] } = useChildren();
   const [activeChild, setActiveChild] = useState<string>("");
   const cid = activeChild || children[0]?.id;
   const activeChildData = children.find(c => c.id === cid);
@@ -286,15 +284,21 @@ export default function Baby() {
   const { data: appointments = [], upsertAppointment, deleteAppointment } = useAppointments();
   const [tab, setTab] = useState<"logs" | "charts" | "events">("logs");
   const [eventModal, setEventModal] = useState(false);
-  const [addChildModal, setAddChildModal] = useState(false);
   const [addLogType, setAddLogType] = useState<string | null>(null);
   const [editingLog, setEditingLog] = useState<Row | null>(null);
-  const [pendingDeleteChild, setPendingDeleteChild] = useState<Row | null>(null);
+  const [selectedDate, setSelectedDate] = useState(new Date().toISOString().slice(0, 10));
 
-  const today = new Date().toISOString().slice(0, 10);
-  const todayLogs = logs.filter(l => l.event_at?.slice(0, 10) === today);
-  const feedings = todayLogs.filter(l => l.log_type === "feeding");
+  const dateLogs = logs.filter(l => l.event_at?.slice(0, 10) === selectedDate);
+  const feedings = dateLogs.filter(l => l.log_type === "feeding");
   const totalMl = feedings.reduce((s, f) => s + (f.amount ?? 0), 0);
+
+  const navigateDate = (delta: number) => {
+    const d = new Date(selectedDate + "T12:00:00");
+    d.setDate(d.getDate() + delta);
+    setSelectedDate(d.toISOString().slice(0, 10));
+  };
+
+  const isToday = selectedDate === new Date().toISOString().slice(0, 10);
 
   // Get last feeding amount for default
   const lastFeedingAmount = useMemo(() => {
@@ -326,9 +330,6 @@ export default function Baby() {
               <Icon name="plus" className="w-3.5 h-3.5" /> אירוע
             </button>
           )}
-          <button onClick={() => setAddChildModal(true)} className="bg-slate-700 hover:bg-slate-600 text-white text-sm font-medium px-3 py-2 rounded-lg transition-colors flex items-center gap-1.5">
-            <Icon name="plus" className="w-3.5 h-3.5" /> תינוק/ת
-          </button>
         </div>
       </div>
 
@@ -336,8 +337,8 @@ export default function Baby() {
       {children.length === 0 && (
         <div className="text-center py-16 text-theme-muted">
           <Icon name="baby" className="w-12 h-12 mx-auto mb-3 opacity-50" />
-          <p className="mb-4">עדיין לא הוספת תינוק/ת</p>
-          <button onClick={() => setAddChildModal(true)} className="bg-accent-600 hover:bg-accent-500 text-white text-sm font-medium px-4 py-2 rounded-lg">הוסף תינוק/ת</button>
+          <p className="mb-2">עדיין לא הוספת תינוק/ת</p>
+          <p className="text-xs">ניתן להוסיף תינוקות דרך ההגדרות</p>
         </div>
       )}
 
@@ -350,12 +351,35 @@ export default function Baby() {
               {c.name}
             </button>
           ))}
-          {/* Delete child button */}
-          {activeChildData && (
-            <button onClick={() => setPendingDeleteChild(activeChildData)} className="px-2 py-1.5 rounded-lg text-xs text-red-400 hover:text-red-300 hover:bg-red-950/50 transition-colors">
-              <Icon name="trash" className="w-3.5 h-3.5" />
-            </button>
-          )}
+        </div>
+      )}
+
+      {/* Date Navigation */}
+      {children.length > 0 && tab === "logs" && (
+        <div className="flex items-center gap-3 mb-5">
+          <button onClick={() => navigateDate(-1)} className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-theme-muted hover:text-theme transition-colors">
+            <Icon name="chevron-right" className="w-4 h-4" />
+          </button>
+          <div className="flex items-center gap-2">
+            <input
+              type="date"
+              value={selectedDate}
+              onChange={e => setSelectedDate(e.target.value)}
+              className="input-base text-sm py-1.5"
+            />
+            {!isToday && (
+              <button onClick={() => setSelectedDate(new Date().toISOString().slice(0, 10))}
+                className="text-xs text-accent-400 hover:text-accent-300 font-medium">
+                היום
+              </button>
+            )}
+          </div>
+          <button onClick={() => navigateDate(1)} className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-theme-muted hover:text-theme transition-colors">
+            <Icon name="chevron-left" className="w-4 h-4" />
+          </button>
+          <span className="text-xs text-theme-muted">
+            {new Date(selectedDate + "T12:00:00").toLocaleDateString("he-IL", { weekday: "long", day: "numeric", month: "long" })}
+          </span>
         </div>
       )}
 
@@ -383,11 +407,11 @@ export default function Baby() {
                   {feedings.length > 0 && <div className="text-xs text-accent-400 mt-0.5">{totalMl} מ״ל</div>}
                 </div>
                 <div className="bg-slate-900 border border-slate-800 rounded-xl p-4 text-center">
-                  <div className="text-2xl font-bold text-theme">{todayLogs.filter(l => l.log_type === "diaper_change").length}</div>
+                  <div className="text-2xl font-bold text-theme">{dateLogs.filter(l => l.log_type === "diaper_change").length}</div>
                   <div className="text-xs text-theme-muted mt-1">חיתולים</div>
                 </div>
                 <div className="bg-slate-900 border border-slate-800 rounded-xl p-4 text-center">
-                  <div className="text-2xl font-bold text-theme">{todayLogs.length}</div>
+                  <div className="text-2xl font-bold text-theme">{dateLogs.length}</div>
                   <div className="text-xs text-theme-muted mt-1">סה״כ</div>
                 </div>
               </div>
@@ -404,7 +428,7 @@ export default function Baby() {
 
               {/* Today's log list */}
               <div className="space-y-2">
-                {todayLogs.map(log => (
+                {dateLogs.map(log => (
                   <div key={log.id} className="flex items-center gap-3 bg-slate-900 border border-slate-800 rounded-xl px-4 py-3 group">
                     <LogIcon type={log.log_type} />
                     <div className="flex-1 min-w-0">
@@ -423,7 +447,7 @@ export default function Baby() {
                     </div>
                   </div>
                 ))}
-                {todayLogs.length === 0 && <div className="text-center py-10 text-theme-muted">אין רשומות להיום. השתמש בכפתורים למעלה.</div>}
+                {dateLogs.length === 0 && <div className="text-center py-10 text-theme-muted">אין רשומות להיום. השתמש בכפתורים למעלה.</div>}
               </div>
             </div>
           )}
@@ -471,36 +495,6 @@ export default function Baby() {
         <EditLogModal log={editingLog} onClose={() => setEditingLog(null)} onSave={log => updateLog.mutate(log)} />
       )}
       {eventModal && <AddEventModal children={children} onClose={() => setEventModal(false)} onSave={data => upsertAppointment.mutate(data)} />}
-      {addChildModal && (
-        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
-          <form onSubmit={e => { e.preventDefault(); const fd = new FormData(e.currentTarget); addChild.mutate({ name: fd.get("name") as string, birth_date: fd.get("birth_date") as string }); setAddChildModal(false); }}
-            className="bg-slate-900 border border-slate-700 rounded-2xl p-5 w-full max-w-xs space-y-4">
-            <div className="flex items-center justify-between">
-              <h3 className="font-semibold text-theme">הוסף תינוק/ת</h3>
-              <button type="button" onClick={() => setAddChildModal(false)} className="text-theme-muted hover:text-theme"><Icon name="x" className="w-4 h-4" /></button>
-            </div>
-            <div><label className="text-xs text-theme-muted block mb-1">שם *</label><input name="name" required className="input-base w-full" placeholder="לילה" /></div>
-            <div><label className="text-xs text-theme-muted block mb-1">תאריך לידה *</label><input name="birth_date" type="date" required className="input-base w-full" /></div>
-            <button type="submit" className="w-full bg-accent-600 hover:bg-accent-500 text-white font-medium py-2 rounded-lg text-sm transition-colors">הוסף</button>
-          </form>
-        </div>
-      )}
-      {pendingDeleteChild && (
-        <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4">
-          <div className="w-full max-w-md rounded-2xl border border-slate-700 bg-slate-900 p-5">
-            <div className="flex items-center gap-2 mb-1">
-              <Icon name="warning" className="w-5 h-5 text-red-400" />
-              <h3 className="text-base font-semibold text-theme">למחוק את {pendingDeleteChild.name}?</h3>
-            </div>
-            <p className="text-sm text-theme-muted mt-1">כל הנתונים של תינוק/ת זו יימחקו.</p>
-            <div className="flex justify-end gap-2 mt-4">
-              <button onClick={() => setPendingDeleteChild(null)} className="px-3 py-2 rounded-lg text-sm bg-slate-800 text-theme-muted hover:bg-slate-700">ביטול</button>
-              <button onClick={() => { deleteChild.mutate(pendingDeleteChild.id); setPendingDeleteChild(null); setActiveChild(""); }}
-                className="px-3 py-2 rounded-lg text-sm bg-red-600 text-white hover:bg-red-500">מחיקה</button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

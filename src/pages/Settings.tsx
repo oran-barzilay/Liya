@@ -1,10 +1,13 @@
 import { useState } from "react";
 import { useThemeStore, ACCENT_OPTIONS, THEME_PRESETS, getContrastColor } from "../state/stores/themeStore";
 import { useProfile } from "../hooks/useProfile";
+import { useChildren } from "../hooks/useBaby";
 import Icon from "../components/Icon";
 
 export default function Settings() {
   const {
+    appName,
+    setAppName,
     accentColor,
     setAccentColor,
     accentCustom,
@@ -23,7 +26,13 @@ export default function Settings() {
     removePalette,
   } = useThemeStore();
   const { data: profile } = useProfile();
+  const { data: children = [], addChild, deleteChild } = useChildren();
   const [paletteName, setPaletteName] = useState("");
+  const [editingName, setEditingName] = useState(false);
+  const [nameInput, setNameInput] = useState(appName);
+  const [newChildName, setNewChildName] = useState("");
+  const [newChildBirth, setNewChildBirth] = useState("");
+  const [pendingDeleteChild, setPendingDeleteChild] = useState<Record<string, any> | null>(null);
 
   // Warn if text on background has low contrast
   const appContrast = getContrastColor(appBg);
@@ -211,7 +220,71 @@ export default function Settings() {
         )}
       </section>
 
-      <section className="bg-slate-900 border border-slate-800 rounded-2xl p-6">
+      <section className="bg-slate-900 border border-slate-800 rounded-2xl p-6 mb-5">
+        <h3 className="text-base font-semibold mb-4 text-theme flex items-center gap-2">
+          <Icon name="home" className="w-4 h-4 text-accent-400" /> כללי
+        </h3>
+        <div className="space-y-4">
+          {/* App name */}
+          <div className="flex items-center justify-between py-2 border-b border-slate-800">
+            <span className="text-sm text-theme-muted">שם האפליקציה (תצוגה)</span>
+            {editingName ? (
+              <div className="flex items-center gap-2">
+                <input value={nameInput} onChange={e => setNameInput(e.target.value)} className="input-base text-sm py-1 w-32" autoFocus />
+                <button onClick={() => { setAppName(nameInput); setEditingName(false); }} className="text-xs px-2 py-1 rounded bg-accent-600 text-white hover:bg-accent-500">שמור</button>
+                <button onClick={() => { setNameInput(appName); setEditingName(false); }} className="text-xs px-2 py-1 rounded bg-slate-700 text-theme-muted hover:bg-slate-600">ביטול</button>
+              </div>
+            ) : (
+              <div className="flex items-center gap-2">
+                <span className="text-sm text-theme font-medium">{appName}</span>
+                <button onClick={() => setEditingName(true)} className="text-theme-muted hover:text-accent-400"><Icon name="edit" className="w-3.5 h-3.5" /></button>
+              </div>
+            )}
+          </div>
+        </div>
+      </section>
+
+      {/* Baby management */}
+      <section className="bg-slate-900 border border-slate-800 rounded-2xl p-6 mb-5">
+        <h3 className="text-base font-semibold mb-4 text-theme flex items-center gap-2">
+          <Icon name="babies" className="w-4 h-4 text-accent-400" /> ניהול תינוקות
+        </h3>
+        {children.length > 0 && (
+          <div className="space-y-2 mb-4">
+            {children.map(child => (
+              <div key={child.id} className="flex items-center justify-between py-2 px-3 bg-slate-800 rounded-lg">
+                <div>
+                  <span className="text-sm text-theme font-medium">{child.name}</span>
+                  {child.birth_date && <span className="text-xs text-theme-muted mr-2"> · {new Date(child.birth_date).toLocaleDateString("he-IL")}</span>}
+                </div>
+                <button onClick={() => setPendingDeleteChild(child)} className="text-theme-muted hover:text-red-400 transition-colors">
+                  <Icon name="trash" className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+        {children.length === 0 && <p className="text-sm text-theme-muted mb-4">לא הוספו תינוקות עדיין.</p>}
+        <div className="flex items-end gap-2">
+          <div className="flex-1">
+            <label className="text-xs text-theme-muted block mb-1">שם</label>
+            <input value={newChildName} onChange={e => setNewChildName(e.target.value)} className="input-base w-full" placeholder="לילה" />
+          </div>
+          <div>
+            <label className="text-xs text-theme-muted block mb-1">תאריך לידה</label>
+            <input type="date" value={newChildBirth} onChange={e => setNewChildBirth(e.target.value)} className="input-base" />
+          </div>
+          <button
+            disabled={!newChildName || !newChildBirth}
+            onClick={() => { addChild.mutate({ name: newChildName, birth_date: newChildBirth }); setNewChildName(""); setNewChildBirth(""); }}
+            className="bg-accent-600 hover:bg-accent-500 disabled:opacity-40 text-white text-sm font-medium px-3 py-2 rounded-lg transition-colors flex items-center gap-1.5 shrink-0"
+          >
+            <Icon name="plus" className="w-3.5 h-3.5" /> הוסף
+          </button>
+        </div>
+      </section>
+
+      <section className="bg-slate-900 border border-slate-800 rounded-2xl p-6 mb-5">
         <h3 className="text-base font-semibold mb-4 text-theme">פרטי משתמש</h3>
         <div className="space-y-3 text-sm">
           <div className="flex items-center justify-between py-2 border-b border-slate-800">
@@ -228,6 +301,24 @@ export default function Settings() {
           </div>
         </div>
       </section>
+
+      {/* Delete child confirmation */}
+      {pendingDeleteChild && (
+        <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4">
+          <div className="w-full max-w-md rounded-2xl border border-slate-700 bg-slate-900 p-5">
+            <div className="flex items-center gap-2 mb-1">
+              <Icon name="warning" className="w-5 h-5 text-red-400" />
+              <h3 className="text-base font-semibold text-theme">למחוק את {pendingDeleteChild.name}?</h3>
+            </div>
+            <p className="text-sm text-theme-muted mt-1">כל הנתונים של תינוק/ת זו יימחקו לצמיתות.</p>
+            <div className="flex justify-end gap-2 mt-4">
+              <button onClick={() => setPendingDeleteChild(null)} className="px-3 py-2 rounded-lg text-sm bg-slate-800 text-theme-muted hover:bg-slate-700">ביטול</button>
+              <button onClick={() => { deleteChild.mutate(pendingDeleteChild.id); setPendingDeleteChild(null); }}
+                className="px-3 py-2 rounded-lg text-sm bg-red-600 text-white hover:bg-red-500">מחיקה</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

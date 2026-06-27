@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useAuth } from "../contexts/AuthContext";
 import { supabase } from "../lib/supabase";
 import { useQueryClient } from "@tanstack/react-query";
+import Icon from "../components/Icon";
 export default function Setup() {
   const { user } = useAuth();
   const qc = useQueryClient();
@@ -50,18 +51,18 @@ export default function Setup() {
     <div className="min-h-screen bg-slate-950 flex items-center justify-center px-4">
       <div className="w-full max-w-sm">
         <div className="text-center mb-8">
-          <div className="text-4xl mb-3">👋</div>
+          <Icon name="hand-wave" className="w-10 h-10 mx-auto mb-3 text-accent-400" />
           <h1 className="text-2xl font-bold text-white">ברוך הבא ל-Fami</h1>
           <p className="text-slate-400 mt-2 text-sm">מחובר בתור <span className="text-accent-400">{user?.email}</span></p>
         </div>
         <div className="flex rounded-xl bg-slate-900 border border-slate-800 p-1 mb-4">
           <button type="button" onClick={() => { setMode("create"); setError(""); }}
-            className={"flex-1 py-2 rounded-lg text-sm font-medium transition-colors " + (mode === "create" ? "bg-accent-600 text-white" : "text-slate-400 hover:text-white")}>
-            🏠 בית חדש
+            className={"flex-1 py-2 rounded-lg text-sm font-medium transition-colors flex items-center justify-center gap-1.5 " + (mode === "create" ? "bg-accent-600 text-white" : "text-slate-400 hover:text-white")}>
+            <Icon name="home" className="w-4 h-4" /> בית חדש
           </button>
           <button type="button" onClick={() => { setMode("join"); setError(""); }}
-            className={"flex-1 py-2 rounded-lg text-sm font-medium transition-colors " + (mode === "join" ? "bg-accent-600 text-white" : "text-slate-400 hover:text-white")}>
-            🔗 הצטרף לבית
+            className={"flex-1 py-2 rounded-lg text-sm font-medium transition-colors flex items-center justify-center gap-1.5 " + (mode === "join" ? "bg-accent-600 text-white" : "text-slate-400 hover:text-white")}>
+            <Icon name="link" className="w-4 h-4" /> הצטרף לבית
           </button>
         </div>
         <form onSubmit={handleSubmit} className="bg-slate-900 border border-slate-800 rounded-2xl p-6 space-y-4">
@@ -86,7 +87,7 @@ export default function Setup() {
               <p className="text-xs text-slate-500 mt-1.5">בקש מאורן לשתף את מזהה הבית מלוח הבקרה.</p>
             </div>
           )}
-          {error && <p className="text-red-400 text-sm bg-red-950/50 border border-red-800 rounded-lg px-3 py-2">⚠️ {error}</p>}
+          {error && <p className="text-red-400 text-sm bg-red-950/50 border border-red-800 rounded-lg px-3 py-2 flex items-center gap-2"><Icon name="warning" className="w-4 h-4 shrink-0" /> {error}</p>}
           <button type="submit" disabled={loading}
             className="w-full bg-accent-600 hover:bg-accent-500 disabled:opacity-60 text-white font-medium py-2.5 rounded-lg transition-colors text-sm">
             {loading ? "מגדיר…" : (mode === "create" ? "צור בית" : "הצטרף לבית")}

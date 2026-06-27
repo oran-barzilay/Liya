@@ -13,19 +13,46 @@ import Baby from "./pages/Baby";
 import Finance from "./pages/Finance";
 import Settings from "./pages/Settings";
 
+function hexToRgb(hex: string) {
+  const cleaned = hex.replace("#", "");
+  if (!/^[0-9a-fA-F]{6}$/.test(cleaned)) return null;
+  const r = Number.parseInt(cleaned.slice(0, 2), 16);
+  const g = Number.parseInt(cleaned.slice(2, 4), 16);
+  const b = Number.parseInt(cleaned.slice(4, 6), 16);
+  return `${r} ${g} ${b}`;
+}
+
 function AppRoutes() {
   const { user, loading: authLoading } = useAuth();
   const { data: profile, isLoading: profileLoading } = useProfile();
-  const { accentColor } = useThemeStore();
+  const { accentColor, accentCustom, appBg, menuBg, textPrimary, textMuted } = useThemeStore();
 
   useEffect(() => {
-    document.documentElement.setAttribute("data-accent", accentColor);
-  }, [accentColor]);
+    const root = document.documentElement;
+    root.setAttribute("data-accent", accentColor);
+    root.style.setProperty("--app-bg", appBg);
+    root.style.setProperty("--menu-bg", menuBg);
+    root.style.setProperty("--text-primary", textPrimary);
+    root.style.setProperty("--text-muted", textMuted);
+    if (accentColor === "custom") {
+      const rgb = hexToRgb(accentCustom);
+      if (rgb) {
+        root.style.setProperty("--accent-300", rgb);
+        root.style.setProperty("--accent-400", rgb);
+        root.style.setProperty("--accent-500", rgb);
+        root.style.setProperty("--accent-600", rgb);
+        root.style.setProperty("--accent-700", rgb);
+        root.style.setProperty("--accent-800", rgb);
+        root.style.setProperty("--accent-900", rgb);
+        root.style.setProperty("--accent-950", rgb);
+      }
+    }
+  }, [accentColor, accentCustom, appBg, menuBg, textPrimary, textMuted]);
 
   if (authLoading || (user && profileLoading)) {
     return (
-      <div className="min-h-screen bg-slate-950 flex items-center justify-center">
-        <div className="text-slate-400 text-sm animate-pulse">טוען…</div>
+      <div className="min-h-screen flex items-center justify-center" style={{ backgroundColor: appBg }}>
+        <div className="text-sm animate-pulse" style={{ color: textMuted }}>טוען...</div>
       </div>
     );
   }
@@ -51,4 +78,3 @@ function AppRoutes() {
 export default function App() {
   return <AppRoutes />;
 }
-

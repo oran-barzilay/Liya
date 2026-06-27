@@ -25,6 +25,20 @@ export function useTasks() {
     enabled: !!hid,
   });
 
+  const members = useQuery<Row[]>({
+    queryKey: ["users", hid],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("users")
+        .select("id, display_name")
+        .eq("household_id", hid)
+        .order("display_name");
+      if (error) throw error;
+      return data ?? [];
+    },
+    enabled: !!hid,
+  });
+
   const createTask = useMutation({
     mutationFn: async (task: Row) => {
       const { data, error } = await supabase
@@ -60,6 +74,5 @@ export function useTasks() {
     onSuccess: () => qc.invalidateQueries({ queryKey: queryKeys.tasks(hid) }),
   });
 
-  return { ...query, createTask, updateTask, deleteTask, profile };
+  return { ...query, createTask, updateTask, deleteTask, members: members.data ?? [], profile };
 }
-

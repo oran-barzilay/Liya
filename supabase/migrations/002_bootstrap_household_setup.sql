@@ -99,6 +99,70 @@ begin
 end;
 $$;
 
+create or replace function public.create_restock_task()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  existing_task_id uuid;
+begin
+  if not new.auto_restock_task then
+    return new;
+  end if;
+
+  if new.quantity < new.critical_threshold then
+    new.last_below_threshold_at = now();
+
+    select t.id
+    into existing_task_id
+    from public.tasks t
+    where t.household_id = new.household_id
+      and t.source_type = 'inventory_threshold'
+      and t.source_entity = 'inventory'
+      and t.source_id = new.id
+      and t.status in ('todo', 'in_progress')
+    limit 1;
+
+    if existing_task_id is null then
+      insert into public.tasks (
+        household_id,
+        title,
+        description,
+        module,
+        task_type,
+        status,
+        priority_level,
+        due_at,
+        source_type,
+        source_entity,
+        source_id,
+        created_by,
+        assigned_to
+      )
+      values (
+        new.household_id,
+        'רכישת ' || new.name,
+        'המלאי מתחת לסף (' || new.quantity || ' ' || new.unit || ' < ' || new.critical_threshold || ' ' || new.unit || ').',
+        'inventory',
+        'priority',
+        'todo',
+        1,
+        now() + interval '12 hours',
+        'inventory_threshold',
+        'inventory',
+        new.id,
+        new.updated_by,
+        null
+      );
+    end if;
+  end if;
+
+  return new;
+end;
+$$;
+
 revoke all on function public.create_household_with_owner(text, text) from public;
 revoke all on function public.join_household(uuid, text) from public;
 grant execute on function public.create_household_with_owner(text, text) to authenticated;

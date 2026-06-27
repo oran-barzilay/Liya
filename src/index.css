@@ -13,6 +13,10 @@
   --accent-800: 55 48 163;
   --accent-900: 49 46 129;
   --accent-950: 30 27 75;
+  --app-bg: #020617;
+  --menu-bg: #0f172a;
+  --text-primary: #f1f5f9;
+  --text-muted: #94a3b8;
 }
 
 [data-accent="purple"] {
@@ -73,6 +77,8 @@
 body {
   margin: 0;
   font-family: Heebo, system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+  background-color: var(--app-bg);
+  color: var(--text-primary);
 }
 
 /* RTL-aware scroll */
@@ -82,7 +88,15 @@ html[dir="rtl"] * {
 
 @layer components {
   .input-base {
-    @apply bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-accent-500;
+    @apply bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-accent-500;
+    color: var(--text-primary);
+  }
+
+  /* Theme-aware text utilities */
+  .text-theme {
+    color: var(--text-primary);
+  }
+  .text-theme-muted {
+    color: var(--text-muted);
   }
 }
-

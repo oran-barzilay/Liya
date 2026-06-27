@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useAuth } from "../contexts/AuthContext";
 import { supabase } from "../lib/supabase";
 import { useNavigate } from "react-router-dom";
+import Icon from "../components/Icon";
 export default function Login() {
   const { signIn } = useAuth();
   const navigate = useNavigate();
@@ -51,8 +52,9 @@ export default function Login() {
         </div>
         <form onSubmit={handleSubmit} className="bg-slate-900 border border-slate-800 rounded-2xl p-6 space-y-4">
           {mode === "signup" && (
-            <div className="bg-accent-950/50 border border-accent-800 rounded-lg px-3 py-2.5 text-xs text-accent-300">
-              👋 פעם ראשונה? צור חשבון כאן. אחרי ההרשמה תגדיר את שם הבית והפרופיל שלך.
+            <div className="bg-accent-950/50 border border-accent-800 rounded-lg px-3 py-2.5 text-xs text-accent-300 flex items-start gap-2">
+              <Icon name="hand-wave" className="w-4 h-4 shrink-0 mt-0.5" />
+              <span>פעם ראשונה? צור חשבון כאן. אחרי ההרשמה תגדיר את שם הבית והפרופיל שלך.</span>
             </div>
           )}
           <div>
@@ -75,8 +77,8 @@ export default function Login() {
                 placeholder="••••••••" />
             </div>
           )}
-          {error && <p className="text-red-400 text-sm bg-red-950/50 border border-red-800 rounded-lg px-3 py-2">⚠️ {error}</p>}
-          {info && <p className="text-emerald-400 text-sm bg-emerald-950/50 border border-emerald-800 rounded-lg px-3 py-2">✓ {info}</p>}
+          {error && <p className="text-red-400 text-sm bg-red-950/50 border border-red-800 rounded-lg px-3 py-2 flex items-center gap-2"><Icon name="warning" className="w-4 h-4 shrink-0" /> {error}</p>}
+          {info && <p className="text-emerald-400 text-sm bg-emerald-950/50 border border-emerald-800 rounded-lg px-3 py-2 flex items-center gap-2"><Icon name="check" className="w-4 h-4 shrink-0" /> {info}</p>}
           <button type="submit" disabled={loading}
             className="w-full bg-accent-600 hover:bg-accent-500 disabled:opacity-60 text-white font-medium py-2.5 rounded-lg transition-colors text-sm">
             {loading ? (mode === "signup" ? "יוצר חשבון…" : "מתחבר…") : (mode === "signup" ? "צור חשבון" : "כניסה")}

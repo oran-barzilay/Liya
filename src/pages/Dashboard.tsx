@@ -67,9 +67,9 @@ export default function Dashboard() {
         <StatCard icon={<Icon name="wallet" className="w-6 h-6" />} label="מאזן חודשי" value={"₪" + balance.toLocaleString("he-IL")}
           sub={"הכנסות ₪" + totals.income.toLocaleString("he-IL") + " | הוצאות ₪" + totals.expenses.toLocaleString("he-IL")}
           color={balance >= 0 ? "emerald" : "red"} />
-        <StatCard icon={<Icon name="medical" className="w-6 h-6" />} label="תור הבא"
+        <StatCard icon={<Icon name="medical" className="w-6 h-6" />} label="אירוע הבא"
           value={nextAppt ? new Date(nextAppt.starts_at).toLocaleDateString("he-IL", { month: "short", day: "numeric" }) : "אין"}
-          sub={nextAppt?.title ?? "אין תורים קרובים"} color="amber" />
+          sub={nextAppt?.title ?? "אין אירועים קרובים"} color="amber" />
       </div>
 
       {todayTimeSensitive.length > 0 && (

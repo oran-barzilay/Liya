@@ -8,8 +8,9 @@ type Row = Record<string, any>;
 export function useChildren() {
   const { data: profile } = useProfile();
   const hid = profile?.household_id ?? "";
+  const qc = useQueryClient();
 
-  return useQuery<Row[]>({
+  const query = useQuery<Row[]>({
     queryKey: ["children", hid],
     queryFn: async () => {
       const { data, error } = await supabase
@@ -21,6 +22,29 @@ export function useChildren() {
     },
     enabled: !!hid,
   });
+
+  const addChild = useMutation({
+    mutationFn: async (child: { name: string; birth_date: string }) => {
+      const { data, error } = await supabase
+        .from("children")
+        .insert({ ...child, household_id: hid })
+        .select()
+        .single();
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["children", hid] }),
+  });
+
+  const deleteChild = useMutation({
+    mutationFn: async (childId: string) => {
+      const { error } = await supabase.from("children").delete().eq("id", childId);
+      if (error) throw error;
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["children", hid] }),
+  });
+
+  return { ...query, addChild, deleteChild };
 }
 
 export function useBabyLogs(childId?: string) {
@@ -36,7 +60,7 @@ export function useBabyLogs(childId?: string) {
         .select("*")
         .eq("household_id", hid)
         .order("event_at", { ascending: false })
-        .limit(100);
+        .limit(200);
       if (childId) q = q.eq("child_id", childId);
       const { data, error } = await q;
       if (error) throw error;
@@ -58,7 +82,30 @@ export function useBabyLogs(childId?: string) {
     onSuccess: () => qc.invalidateQueries({ queryKey: ["baby_logs", hid] }),
   });
 
-  return { ...query, addLog, profile };
+  const updateLog = useMutation({
+    mutationFn: async (log: Row) => {
+      const { id, ...rest } = log;
+      const { data, error } = await supabase
+        .from("baby_logs")
+        .update(rest)
+        .eq("id", id)
+        .select()
+        .single();
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["baby_logs", hid] }),
+  });
+
+  const deleteLog = useMutation({
+    mutationFn: async (logId: string) => {
+      const { error } = await supabase.from("baby_logs").delete().eq("id", logId);
+      if (error) throw error;
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["baby_logs", hid] }),
+  });
+
+  return { ...query, addLog, updateLog, deleteLog, profile };
 }
 
 export function useAppointments() {
@@ -73,7 +120,6 @@ export function useAppointments() {
         .from("appointments")
         .select("*, children(name)")
         .eq("household_id", hid)
-        .gte("starts_at", new Date().toISOString())
         .order("starts_at");
       if (error) throw error;
       return data ?? [];
@@ -93,6 +139,13 @@ export function useAppointments() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ["appointments", hid] }),
   });
 
-  return { ...query, upsertAppointment, profile };
-}
+  const deleteAppointment = useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase.from("appointments").delete().eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["appointments", hid] }),
+  });
 
+  return { ...query, upsertAppointment, deleteAppointment, profile };
+}

@@ -15,10 +15,14 @@ const NAV_ITEMS = [
 export default function Layout({ children }: { children: React.ReactNode }) {
   const { user, signOut } = useAuth();
   const { data: profile } = useProfile();
-  const { menuBg, appBg } = useThemeStore();
+  const { menuBg, appBg, accentCustom, accentColor } = useThemeStore();
   const navigate = useNavigate();
 
   const menuContrast = getContrastColor(menuBg);
+  // Determine if accent-600 is light or dark to pick proper text color
+  const accentHex = accentColor === "custom" ? accentCustom : { indigo: "#4f46e5", purple: "#9333ea", blue: "#2563eb", emerald: "#059669", rose: "#e11d48", amber: "#d97706" }[accentColor] ?? "#4f46e5";
+  const accentContrast = getContrastColor(accentHex);
+  const activeTextColor = accentContrast === "dark" ? "text-slate-900" : "text-white";
 
   const handleSignOut = async () => {
     await signOut();
@@ -30,7 +34,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   const menuTextMuted = menuContrast === "dark" ? "text-slate-500" : "text-slate-400";
   const menuBorder = menuContrast === "dark" ? "border-slate-200" : "border-slate-800";
   const menuHover = menuContrast === "dark" ? "hover:bg-slate-200 hover:text-slate-900" : "hover:bg-slate-800 hover:text-white";
-  const menuActive = "bg-accent-600 text-white";
+  const menuActive = `bg-accent-600 ${activeTextColor}`;
   const titleColor = "text-accent-400";
 
   return (

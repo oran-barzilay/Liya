@@ -86,10 +86,37 @@ html[dir="rtl"] * {
   letter-spacing: 0;
 }
 
+/* Fix native select/option contrast */
+select option {
+  background-color: #1e293b;
+  color: #f1f5f9;
+}
+
+/* Fix cursor / selection colors */
+::selection {
+  background-color: rgb(var(--accent-500) / 0.4);
+  color: var(--text-primary);
+}
+
+/* Fix focus ring visibility */
+:focus-visible {
+  outline: 2px solid rgb(var(--accent-500));
+  outline-offset: 2px;
+}
+
 @layer components {
   .input-base {
     @apply bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-accent-500;
     color: var(--text-primary);
+  }
+
+  /* Ensure select elements have proper styling */
+  select.input-base {
+    appearance: none;
+    background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' fill='none' stroke='%2394a3b8' stroke-width='1.5'%3E%3Cpath d='M4 6l4 4 4-4'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: left 0.5rem center;
+    padding-left: 2rem;
   }
 
   /* Theme-aware text utilities */
@@ -98,5 +125,14 @@ html[dir="rtl"] * {
   }
   .text-theme-muted {
     color: var(--text-muted);
+  }
+
+  /* Active button - ensures accent bg has proper contrasting text */
+  .btn-accent {
+    @apply bg-accent-600 font-medium px-3 py-2 rounded-lg text-sm transition-colors;
+    color: white;
+  }
+  .btn-accent:hover {
+    @apply bg-accent-500;
   }
 }

@@ -1,44 +1,188 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useChildren, useBabyLogs, useAppointments } from "../hooks/useBaby";
-import { supabase } from "../lib/supabase";
 import { useProfile } from "../hooks/useProfile";
-import { useQueryClient } from "@tanstack/react-query";
 import Icon from "../components/Icon";
 
 type Row = Record<string, any>;
 
-const LOG_LABELS: Record<string, string> = { feeding: "האכלה", diaper_change: "החלפת חיתול", sleep: "שינה", note: "הערה" };
+const LOG_LABELS: Record<string, string> = {
+  feeding: "האכלה",
+  diaper_change: "החלפת חיתול",
+  sleep: "שינה",
+  bio_gaia: "ביו גאיה",
+  vitamin_d: "ויטמין D",
+  leczchik: "ליקצ׳יק",
+  note: "הערה",
+};
+
+const DIAPER_TYPES: { id: string; label: string }[] = [
+  { id: "pee", label: "פיפי" },
+  { id: "poop", label: "קקי" },
+  { id: "diarrhea", label: "שלשול" },
+];
 
 function LogIcon({ type }: { type: string }) {
   switch (type) {
     case "feeding": return <Icon name="bottle" className="w-5 h-5 text-accent-400" />;
     case "diaper_change": return <Icon name="diaper" className="w-5 h-5 text-amber-400" />;
     case "sleep": return <Icon name="moon" className="w-5 h-5 text-indigo-400" />;
+    case "bio_gaia": case "vitamin_d": case "leczchik": return <Icon name="pill" className="w-5 h-5 text-emerald-400" />;
     default: return <Icon name="clipboard" className="w-5 h-5 text-slate-400" />;
   }
 }
 
-function AddChildModal({ householdId, onClose, onDone }: { householdId: string; onClose: () => void; onDone: () => void }) {
-  const [name, setName] = useState("");
-  const [birthDate, setBirthDate] = useState("");
-  const [loading, setLoading] = useState(false);
+/* ─── Add Log Modal ─── */
+function AddLogModal({ logType, lastAmount, onClose, onSave }: {
+  logType: string;
+  lastAmount?: number;
+  onClose: () => void;
+  onSave: (log: Row) => void;
+}) {
+  const now = new Date();
+  const [eventAt, setEventAt] = useState(now.toISOString().slice(0, 16));
+  const [amount, setAmount] = useState(lastAmount ?? 120);
+  const [diaperTypes, setDiaperTypes] = useState<string[]>(["pee"]);
+  const [sleepStart, setSleepStart] = useState(now.toISOString().slice(0, 16));
+  const [notes, setNotes] = useState("");
+
+  const toggleDiaper = (id: string) => {
+    setDiaperTypes(prev => prev.includes(id) ? prev.filter(t => t !== id) : [...prev, id]);
+  };
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    const base: Row = { event_at: new Date(eventAt).toISOString(), notes: notes || null };
+
+    if (logType === "feeding") {
+      onSave({ ...base, log_type: "feeding", amount, unit: "מ״ל" });
+    } else if (logType === "diaper_change") {
+      onSave({ ...base, log_type: "diaper_change", notes: diaperTypes.join(", ") + (notes ? ` | ${notes}` : "") });
+    } else if (logType === "sleep") {
+      onSave({ ...base, log_type: "sleep", event_at: new Date(sleepStart).toISOString(), notes: notes || "התחלת שינה" });
+    } else {
+      onSave({ ...base, log_type: logType });
+    }
+    onClose();
+  };
+
   return (
     <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
-      <form onSubmit={async e => { e.preventDefault(); setLoading(true); await supabase.from("children").insert({ household_id: householdId, name, birth_date: birthDate }); onDone(); onClose(); setLoading(false); }}
-        className="bg-slate-900 border border-slate-700 rounded-2xl p-5 w-full max-w-xs space-y-4">
+      <form onSubmit={handleSubmit} className="bg-slate-900 border border-slate-700 rounded-2xl p-5 w-full max-w-sm space-y-4">
         <div className="flex items-center justify-between">
-          <h3 className="font-semibold text-theme">הוסף תינוק/ת</h3>
+          <h3 className="font-semibold text-theme">{LOG_LABELS[logType] ?? logType}</h3>
           <button type="button" onClick={onClose} className="text-theme-muted hover:text-theme"><Icon name="x" className="w-4 h-4" /></button>
         </div>
-        <div><label className="text-xs text-theme-muted block mb-1">שם *</label><input required value={name} onChange={e => setName(e.target.value)} className="input-base w-full" placeholder="לילה" /></div>
-        <div><label className="text-xs text-theme-muted block mb-1">תאריך לידה *</label><input type="date" required value={birthDate} onChange={e => setBirthDate(e.target.value)} className="input-base w-full" /></div>
-        <button type="submit" disabled={loading} className="w-full bg-accent-600 hover:bg-accent-500 text-white font-medium py-2 rounded-lg text-sm transition-colors">הוסף</button>
+
+        {/* Time */}
+        <div>
+          <label className="text-xs text-theme-muted block mb-1">
+            {logType === "sleep" ? "שעת תחילת שינה" : "שעת האירוע"}
+          </label>
+          <input
+            type="datetime-local"
+            value={logType === "sleep" ? sleepStart : eventAt}
+            onChange={e => logType === "sleep" ? setSleepStart(e.target.value) : setEventAt(e.target.value)}
+            className="input-base w-full"
+          />
+        </div>
+
+        {/* Feeding amount */}
+        {logType === "feeding" && (
+          <div>
+            <label className="text-xs text-theme-muted block mb-1">כמות (מ״ל)</label>
+            <div className="flex items-center gap-2">
+              <button type="button" onClick={() => setAmount(a => Math.max(0, a - 30))}
+                className="w-10 h-10 rounded-lg bg-slate-800 border border-slate-700 flex items-center justify-center text-theme-muted hover:text-theme hover:bg-slate-700">
+                <Icon name="chevron-right" className="w-4 h-4" />
+              </button>
+              <input type="number" min="0" step="5" value={amount} onChange={e => setAmount(Number(e.target.value))}
+                className="input-base w-full text-center text-lg font-bold" />
+              <button type="button" onClick={() => setAmount(a => a + 30)}
+                className="w-10 h-10 rounded-lg bg-slate-800 border border-slate-700 flex items-center justify-center text-theme-muted hover:text-theme hover:bg-slate-700">
+                <Icon name="chevron-left" className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Diaper types */}
+        {logType === "diaper_change" && (
+          <div>
+            <label className="text-xs text-theme-muted block mb-1">סוג (ניתן לבחור מספר)</label>
+            <div className="flex gap-2">
+              {DIAPER_TYPES.map(dt => (
+                <button key={dt.id} type="button" onClick={() => toggleDiaper(dt.id)}
+                  className={"px-3 py-1.5 rounded-lg text-sm font-medium border transition-colors " +
+                    (diaperTypes.includes(dt.id) ? "bg-accent-600 border-accent-500 text-white" : "bg-slate-800 border-slate-700 text-theme-muted hover:border-slate-500")
+                  }>
+                  {dt.label}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Notes */}
+        <div>
+          <label className="text-xs text-theme-muted block mb-1">הערות</label>
+          <input value={notes} onChange={e => setNotes(e.target.value)} className="input-base w-full" placeholder="אופציונלי" />
+        </div>
+
+        <button type="submit" className="w-full bg-accent-600 hover:bg-accent-500 text-white font-medium py-2 rounded-lg text-sm transition-colors">
+          שמור
+        </button>
       </form>
     </div>
   );
 }
 
-function AddApptModal({ children, onClose, onSave }: { children: Row[]; onClose: () => void; onSave: (a: Row) => void }) {
+/* ─── Edit Log Inline ─── */
+function EditLogModal({ log, onClose, onSave }: { log: Row; onClose: () => void; onSave: (l: Row) => void }) {
+  const [eventAt, setEventAt] = useState(log.event_at?.slice(0, 16) ?? "");
+  const [amount, setAmount] = useState(log.amount ?? 0);
+  const [notes, setNotes] = useState(log.notes ?? "");
+
+  return (
+    <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
+      <form onSubmit={e => { e.preventDefault(); onSave({ id: log.id, event_at: new Date(eventAt).toISOString(), amount: log.log_type === "feeding" ? amount : log.amount, notes: notes || null }); onClose(); }}
+        className="bg-slate-900 border border-slate-700 rounded-2xl p-5 w-full max-w-sm space-y-4">
+        <div className="flex items-center justify-between">
+          <h3 className="font-semibold text-theme">עריכת {LOG_LABELS[log.log_type] ?? log.log_type}</h3>
+          <button type="button" onClick={onClose} className="text-theme-muted hover:text-theme"><Icon name="x" className="w-4 h-4" /></button>
+        </div>
+        <div>
+          <label className="text-xs text-theme-muted block mb-1">זמן</label>
+          <input type="datetime-local" value={eventAt} onChange={e => setEventAt(e.target.value)} className="input-base w-full" />
+        </div>
+        {log.log_type === "feeding" && (
+          <div>
+            <label className="text-xs text-theme-muted block mb-1">כמות (מ״ל)</label>
+            <div className="flex items-center gap-2">
+              <button type="button" onClick={() => setAmount((a: number) => Math.max(0, a - 30))}
+                className="w-10 h-10 rounded-lg bg-slate-800 border border-slate-700 flex items-center justify-center text-theme-muted hover:text-theme">
+                <Icon name="chevron-right" className="w-4 h-4" />
+              </button>
+              <input type="number" min="0" step="5" value={amount} onChange={e => setAmount(Number(e.target.value))}
+                className="input-base w-full text-center text-lg font-bold" />
+              <button type="button" onClick={() => setAmount((a: number) => a + 30)}
+                className="w-10 h-10 rounded-lg bg-slate-800 border border-slate-700 flex items-center justify-center text-theme-muted hover:text-theme">
+                <Icon name="chevron-left" className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+        )}
+        <div>
+          <label className="text-xs text-theme-muted block mb-1">הערות</label>
+          <input value={notes} onChange={e => setNotes(e.target.value)} className="input-base w-full" />
+        </div>
+        <button type="submit" className="w-full bg-accent-600 hover:bg-accent-500 text-white font-medium py-2 rounded-lg text-sm transition-colors">עדכן</button>
+      </form>
+    </div>
+  );
+}
+
+/* ─── Events Modal (replaces appointments) ─── */
+function AddEventModal({ children, onClose, onSave }: { children: Row[]; onClose: () => void; onSave: (a: Row) => void }) {
   const [title, setTitle] = useState("");
   const [startsAt, setStartsAt] = useState("");
   const [childId, setChildId] = useState(children[0]?.id ?? "");
@@ -49,10 +193,10 @@ function AddApptModal({ children, onClose, onSave }: { children: Row[]; onClose:
       <form onSubmit={e => { e.preventDefault(); onSave({ title, starts_at: startsAt, child_id: childId || null, provider_name: provider || null, location: loc || null, status: "scheduled" }); onClose(); }}
         className="bg-slate-900 border border-slate-700 rounded-2xl p-5 w-full max-w-sm space-y-4">
         <div className="flex items-center justify-between">
-          <h3 className="font-semibold text-theme">תור חדש</h3>
+          <h3 className="font-semibold text-theme">אירוע חדש</h3>
           <button type="button" onClick={onClose} className="text-theme-muted hover:text-theme"><Icon name="x" className="w-4 h-4" /></button>
         </div>
-        <div><label className="text-xs text-theme-muted block mb-1">כותרת *</label><input required value={title} onChange={e => setTitle(e.target.value)} className="input-base w-full" placeholder="ביקור רופא" /></div>
+        <div><label className="text-xs text-theme-muted block mb-1">כותרת *</label><input required value={title} onChange={e => setTitle(e.target.value)} className="input-base w-full" placeholder="ביקור רופא / חיסון / אירוע" /></div>
         <div><label className="text-xs text-theme-muted block mb-1">תאריך ושעה *</label><input type="datetime-local" required value={startsAt} onChange={e => setStartsAt(e.target.value)} className="input-base w-full" /></div>
         {children.length > 0 && (
           <div><label className="text-xs text-theme-muted block mb-1">תינוק/ת</label>
@@ -63,46 +207,123 @@ function AddApptModal({ children, onClose, onSave }: { children: Row[]; onClose:
           </div>
         )}
         <div><label className="text-xs text-theme-muted block mb-1">רופא / מטפל</label><input value={provider} onChange={e => setProvider(e.target.value)} className="input-base w-full" placeholder="ד״ר כהן" /></div>
-        <div><label className="text-xs text-theme-muted block mb-1">מיקום</label><input value={loc} onChange={e => setLoc(e.target.value)} className="input-base w-full" placeholder="כתובת הקליניקה" /></div>
-        <button type="submit" className="w-full bg-accent-600 hover:bg-accent-500 text-white font-medium py-2 rounded-lg text-sm transition-colors">שמור תור</button>
+        <div><label className="text-xs text-theme-muted block mb-1">מיקום</label><input value={loc} onChange={e => setLoc(e.target.value)} className="input-base w-full" placeholder="כתובת" /></div>
+        <button type="submit" className="w-full bg-accent-600 hover:bg-accent-500 text-white font-medium py-2 rounded-lg text-sm transition-colors">שמור אירוע</button>
       </form>
     </div>
   );
 }
 
+/* ─── Simple Daily Charts ─── */
+function DailyCharts({ logs, days = 7 }: { logs: Row[]; days?: number }) {
+  const chartData = useMemo(() => {
+    const result: { date: string; feedings: number; ml: number; diapers: number; sleeps: number }[] = [];
+    for (let i = days - 1; i >= 0; i--) {
+      const d = new Date();
+      d.setDate(d.getDate() - i);
+      const dateStr = d.toISOString().slice(0, 10);
+      const dayLogs = logs.filter(l => l.event_at?.slice(0, 10) === dateStr);
+      result.push({
+        date: dateStr,
+        feedings: dayLogs.filter(l => l.log_type === "feeding").length,
+        ml: dayLogs.filter(l => l.log_type === "feeding").reduce((s, l) => s + (l.amount ?? 0), 0),
+        diapers: dayLogs.filter(l => l.log_type === "diaper_change").length,
+        sleeps: dayLogs.filter(l => l.log_type === "sleep").length,
+      });
+    }
+    return result;
+  }, [logs, days]);
+
+  const maxMl = Math.max(...chartData.map(d => d.ml), 1);
+
+  return (
+    <div className="space-y-4">
+      {/* Feeding ML chart */}
+      <div>
+        <h4 className="text-xs font-semibold text-theme-muted mb-2 flex items-center gap-1.5">
+          <Icon name="bottle" className="w-3.5 h-3.5" /> כמות אכילה יומית (מ״ל)
+        </h4>
+        <div className="flex items-end gap-1 h-24">
+          {chartData.map((d, i) => (
+            <div key={i} className="flex-1 flex flex-col items-center gap-1">
+              <div className="w-full bg-slate-800 rounded-t-sm relative overflow-hidden" style={{ height: "100%" }}>
+                <div className="absolute bottom-0 w-full bg-accent-600 rounded-t-sm transition-all" style={{ height: `${(d.ml / maxMl) * 100}%` }} />
+              </div>
+              <span className="text-[9px] text-theme-muted">{new Date(d.date).toLocaleDateString("he-IL", { day: "numeric", month: "numeric" })}</span>
+              <span className="text-[9px] text-accent-400 font-medium">{d.ml}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Counts chart */}
+      <div className="grid grid-cols-3 gap-3">
+        <div className="bg-slate-900 border border-slate-800 rounded-xl p-3 text-center">
+          <div className="text-lg font-bold text-theme">{chartData[chartData.length - 1]?.feedings ?? 0}</div>
+          <div className="text-[10px] text-theme-muted">האכלות היום</div>
+        </div>
+        <div className="bg-slate-900 border border-slate-800 rounded-xl p-3 text-center">
+          <div className="text-lg font-bold text-theme">{chartData[chartData.length - 1]?.diapers ?? 0}</div>
+          <div className="text-[10px] text-theme-muted">חיתולים היום</div>
+        </div>
+        <div className="bg-slate-900 border border-slate-800 rounded-xl p-3 text-center">
+          <div className="text-lg font-bold text-theme">{chartData[chartData.length - 1]?.ml ?? 0}</div>
+          <div className="text-[10px] text-theme-muted">מ״ל היום</div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ─── Main Baby Component ─── */
 export default function Baby() {
-  const { data: children = [], refetch: refetchChildren } = useChildren();
+  const { data: children = [], addChild, deleteChild } = useChildren();
   const { data: profile } = useProfile();
-  const qc = useQueryClient();
   const [activeChild, setActiveChild] = useState<string>("");
   const cid = activeChild || children[0]?.id;
   const activeChildData = children.find(c => c.id === cid);
-  const { data: logs = [], addLog } = useBabyLogs(cid);
-  const { data: appointments = [], upsertAppointment } = useAppointments();
-  const [tab, setTab] = useState<"logs" | "appointments">("logs");
-  const [apptModal, setApptModal] = useState(false);
+  const { data: logs = [], addLog, updateLog, deleteLog } = useBabyLogs(cid);
+  const { data: appointments = [], upsertAppointment, deleteAppointment } = useAppointments();
+  const [tab, setTab] = useState<"logs" | "charts" | "events">("logs");
+  const [eventModal, setEventModal] = useState(false);
   const [addChildModal, setAddChildModal] = useState(false);
+  const [addLogType, setAddLogType] = useState<string | null>(null);
+  const [editingLog, setEditingLog] = useState<Row | null>(null);
+  const [pendingDeleteChild, setPendingDeleteChild] = useState<Row | null>(null);
+
   const today = new Date().toISOString().slice(0, 10);
   const todayLogs = logs.filter(l => l.event_at?.slice(0, 10) === today);
   const feedings = todayLogs.filter(l => l.log_type === "feeding");
-  const diapers = todayLogs.filter(l => l.log_type === "diaper_change");
+  const totalMl = feedings.reduce((s, f) => s + (f.amount ?? 0), 0);
 
-  const quickLog = (type: string, extras: Row = {}) => {
-    if (!cid) return;
-    addLog.mutate({ child_id: cid, log_type: type, event_at: new Date().toISOString(), ...extras });
-  };
+  // Get last feeding amount for default
+  const lastFeedingAmount = useMemo(() => {
+    const lastFeeding = logs.find(l => l.log_type === "feeding" && l.amount);
+    return lastFeeding?.amount ?? 120;
+  }, [logs]);
+
+  // Available log types (built-in + can extend)
+  const logTypes = [
+    { id: "feeding", label: "האכלה", icon: "bottle" as const, color: "text-accent-400" },
+    { id: "diaper_change", label: "חיתול", icon: "diaper" as const, color: "text-amber-400" },
+    { id: "sleep", label: "שינה", icon: "moon" as const, color: "text-indigo-400" },
+    { id: "bio_gaia", label: "ביו גאיה", icon: "pill" as const, color: "text-emerald-400" },
+    { id: "vitamin_d", label: "ויטמין D", icon: "pill" as const, color: "text-yellow-400" },
+    { id: "leczchik", label: "ליקצ׳יק", icon: "pill" as const, color: "text-teal-400" },
+  ];
 
   return (
     <div>
+      {/* Header */}
       <div className="flex items-center justify-between mb-6">
         <div>
           <h2 className="text-2xl font-bold text-theme">תינוקות</h2>
           {activeChildData && <p className="text-accent-400 font-medium mt-0.5">{activeChildData.name}</p>}
         </div>
         <div className="flex gap-2">
-          {tab === "appointments" && (
-            <button onClick={() => setApptModal(true)} className="bg-accent-600 hover:bg-accent-500 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors flex items-center gap-1.5">
-              <Icon name="plus" className="w-3.5 h-3.5" /> תור
+          {tab === "events" && (
+            <button onClick={() => setEventModal(true)} className="bg-accent-600 hover:bg-accent-500 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors flex items-center gap-1.5">
+              <Icon name="plus" className="w-3.5 h-3.5" /> אירוע
             </button>
           )}
           <button onClick={() => setAddChildModal(true)} className="bg-slate-700 hover:bg-slate-600 text-white text-sm font-medium px-3 py-2 rounded-lg transition-colors flex items-center gap-1.5">
@@ -111,6 +332,7 @@ export default function Baby() {
         </div>
       </div>
 
+      {/* Empty state */}
       {children.length === 0 && (
         <div className="text-center py-16 text-theme-muted">
           <Icon name="baby" className="w-12 h-12 mx-auto mb-3 opacity-50" />
@@ -119,78 +341,104 @@ export default function Baby() {
         </div>
       )}
 
-      {children.length > 1 && (
-        <div className="flex gap-2 mb-4">
+      {/* Child selector */}
+      {children.length >= 1 && (
+        <div className="flex gap-2 mb-4 flex-wrap">
           {children.map(c => (
             <button key={c.id} onClick={() => setActiveChild(c.id)}
               className={"px-3 py-1.5 rounded-lg text-sm font-medium transition-colors " + (cid === c.id ? "bg-accent-600 text-white" : "bg-slate-800 text-theme-muted hover:bg-slate-700")}>
               {c.name}
             </button>
           ))}
+          {/* Delete child button */}
+          {activeChildData && (
+            <button onClick={() => setPendingDeleteChild(activeChildData)} className="px-2 py-1.5 rounded-lg text-xs text-red-400 hover:text-red-300 hover:bg-red-950/50 transition-colors">
+              <Icon name="trash" className="w-3.5 h-3.5" />
+            </button>
+          )}
         </div>
       )}
 
+      {/* Tabs */}
       {children.length > 0 && (
         <>
           <div className="flex rounded-lg bg-slate-900 border border-slate-800 p-0.5 w-fit mb-5">
-            {(["logs", "appointments"] as const).map(t => (
+            {(["logs", "charts", "events"] as const).map(t => (
               <button key={t} onClick={() => setTab(t)} className={"px-4 py-1.5 rounded-md text-xs font-medium transition-colors flex items-center gap-1.5 " + (tab === t ? "bg-accent-700 text-white" : "text-theme-muted hover:text-theme")}>
-                {t === "logs" ? <><Icon name="clipboard" className="w-3.5 h-3.5" /> יומן היום</> : <><Icon name="medical" className="w-3.5 h-3.5" /> תורים</>}
+                {t === "logs" && <><Icon name="clipboard" className="w-3.5 h-3.5" /> יומן היום</>}
+                {t === "charts" && <><Icon name="chart" className="w-3.5 h-3.5" /> גרפים</>}
+                {t === "events" && <><Icon name="calendar" className="w-3.5 h-3.5" /> אירועים</>}
               </button>
             ))}
           </div>
 
+          {/* ─── Logs Tab ─── */}
           {tab === "logs" && (
             <div>
+              {/* Summary cards */}
               <div className="grid grid-cols-3 gap-3 mb-6">
                 <div className="bg-slate-900 border border-slate-800 rounded-xl p-4 text-center">
                   <div className="text-2xl font-bold text-theme">{feedings.length}</div>
-                  <div className="text-xs text-theme-muted mt-1">האכלות היום</div>
-                  {feedings.length > 0 && <div className="text-xs text-accent-400 mt-0.5">{feedings.reduce((s, f) => s + (f.amount ?? 0), 0)} מ״ל</div>}
+                  <div className="text-xs text-theme-muted mt-1">האכלות</div>
+                  {feedings.length > 0 && <div className="text-xs text-accent-400 mt-0.5">{totalMl} מ״ל</div>}
                 </div>
                 <div className="bg-slate-900 border border-slate-800 rounded-xl p-4 text-center">
-                  <div className="text-2xl font-bold text-theme">{diapers.length}</div>
-                  <div className="text-xs text-theme-muted mt-1">החלפות חיתול</div>
+                  <div className="text-2xl font-bold text-theme">{todayLogs.filter(l => l.log_type === "diaper_change").length}</div>
+                  <div className="text-xs text-theme-muted mt-1">חיתולים</div>
                 </div>
                 <div className="bg-slate-900 border border-slate-800 rounded-xl p-4 text-center">
                   <div className="text-2xl font-bold text-theme">{todayLogs.length}</div>
-                  <div className="text-xs text-theme-muted mt-1">אירועים סה״כ</div>
+                  <div className="text-xs text-theme-muted mt-1">סה״כ</div>
                 </div>
               </div>
 
+              {/* Quick add buttons */}
               <div className="flex gap-2 flex-wrap mb-5">
-                <button onClick={() => quickLog("feeding", { amount: 120, unit: "מ״ל" })} className="flex items-center gap-1.5 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-xl px-3 py-2 text-sm font-medium transition-colors text-theme">
-                  <Icon name="bottle" className="w-4 h-4 text-accent-400" /> האכלה
-                </button>
-                <button onClick={() => quickLog("diaper_change")} className="flex items-center gap-1.5 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-xl px-3 py-2 text-sm font-medium transition-colors text-theme">
-                  <Icon name="diaper" className="w-4 h-4 text-amber-400" /> חיתול
-                </button>
-                <button onClick={() => quickLog("sleep")} className="flex items-center gap-1.5 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-xl px-3 py-2 text-sm font-medium transition-colors text-theme">
-                  <Icon name="moon" className="w-4 h-4 text-indigo-400" /> שינה
-                </button>
+                {logTypes.map(lt => (
+                  <button key={lt.id} onClick={() => setAddLogType(lt.id)}
+                    className="flex items-center gap-1.5 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-xl px-3 py-2 text-sm font-medium transition-colors text-theme">
+                    <Icon name={lt.icon} className={`w-4 h-4 ${lt.color}`} /> {lt.label}
+                  </button>
+                ))}
               </div>
 
+              {/* Today's log list */}
               <div className="space-y-2">
-                {logs.slice(0, 40).map(log => (
-                  <div key={log.id} className="flex items-center gap-3 bg-slate-900 border border-slate-800 rounded-xl px-4 py-3">
+                {todayLogs.map(log => (
+                  <div key={log.id} className="flex items-center gap-3 bg-slate-900 border border-slate-800 rounded-xl px-4 py-3 group">
                     <LogIcon type={log.log_type} />
-                    <div className="flex-1">
+                    <div className="flex-1 min-w-0">
                       <div className="text-sm font-medium text-theme">{LOG_LABELS[log.log_type] ?? log.log_type}</div>
-                      {log.amount && <div className="text-xs text-theme-muted">{log.amount} {log.unit}</div>}
+                      {log.amount != null && <div className="text-xs text-theme-muted">{log.amount} {log.unit ?? "מ״ל"}</div>}
                       {log.notes && <div className="text-xs text-theme-muted opacity-70">{log.notes}</div>}
                     </div>
                     <span className="text-xs text-theme-muted">{new Date(log.event_at).toLocaleTimeString("he-IL", { hour: "2-digit", minute: "2-digit" })}</span>
+                    <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <button onClick={() => setEditingLog(log)} className="text-theme-muted hover:text-accent-400">
+                        <Icon name="edit" className="w-3.5 h-3.5" />
+                      </button>
+                      <button onClick={() => deleteLog.mutate(log.id)} className="text-theme-muted hover:text-red-400">
+                        <Icon name="trash" className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
                   </div>
                 ))}
-                {logs.length === 0 && <div className="text-center py-10 text-theme-muted">אין רשומות עדיין. השתמש בכפתורים למעלה.</div>}
+                {todayLogs.length === 0 && <div className="text-center py-10 text-theme-muted">אין רשומות להיום. השתמש בכפתורים למעלה.</div>}
               </div>
             </div>
           )}
 
-          {tab === "appointments" && (
+          {/* ─── Charts Tab ─── */}
+          {tab === "charts" && (
+            <DailyCharts logs={logs} days={7} />
+          )}
+
+          {/* ─── Events Tab (replaces appointments) ─── */}
+          {tab === "events" && (
             <div className="space-y-3">
+              {appointments.length === 0 && <div className="text-center py-10 text-theme-muted">אין אירועים. הוסף אירוע חדש.</div>}
               {appointments.map(appt => (
-                <div key={appt.id} className="bg-slate-900 border border-slate-800 rounded-xl px-4 py-3 flex items-start gap-4">
+                <div key={appt.id} className="bg-slate-900 border border-slate-800 rounded-xl px-4 py-3 flex items-start gap-4 group">
                   <div className="text-center shrink-0">
                     <div className="text-sm font-bold text-accent-400">{new Date(appt.starts_at).toLocaleDateString("he-IL", { month: "short", day: "numeric" })}</div>
                     <div className="text-xs text-theme-muted">{new Date(appt.starts_at).toLocaleTimeString("he-IL", { hour: "2-digit", minute: "2-digit" })}</div>
@@ -200,21 +448,58 @@ export default function Baby() {
                     {appt.provider_name && <div className="text-xs text-theme-muted mt-0.5">{appt.provider_name}</div>}
                     {appt.location && <div className="text-xs text-theme-muted opacity-70">{appt.location}</div>}
                   </div>
-                  <span className={"text-xs px-2 py-0.5 rounded-full " + (appt.status === "completed" ? "bg-emerald-900 text-emerald-300" : "bg-slate-800 text-theme-muted")}>
-                    {appt.status === "scheduled" ? "מתוזמן" : appt.status === "completed" ? "הושלם" : "בוטל"}
-                  </span>
+                  <button onClick={() => deleteAppointment.mutate(appt.id)} className="text-theme-muted hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <Icon name="trash" className="w-3.5 h-3.5" />
+                  </button>
                 </div>
               ))}
-              {appointments.length === 0 && <div className="text-center py-10 text-theme-muted">אין תורים קרובים.</div>}
             </div>
           )}
         </>
       )}
 
-      {apptModal && <AddApptModal children={children} onClose={() => setApptModal(false)} onSave={data => upsertAppointment.mutate(data)} />}
-      {addChildModal && profile?.household_id && (
-        <AddChildModal householdId={profile.household_id} onClose={() => setAddChildModal(false)}
-          onDone={() => { refetchChildren(); qc.invalidateQueries({ queryKey: ["children"] }); }} />
+      {/* Modals */}
+      {addLogType && (
+        <AddLogModal
+          logType={addLogType}
+          lastAmount={addLogType === "feeding" ? lastFeedingAmount : undefined}
+          onClose={() => setAddLogType(null)}
+          onSave={log => { if (cid) addLog.mutate({ ...log, child_id: cid }); }}
+        />
+      )}
+      {editingLog && (
+        <EditLogModal log={editingLog} onClose={() => setEditingLog(null)} onSave={log => updateLog.mutate(log)} />
+      )}
+      {eventModal && <AddEventModal children={children} onClose={() => setEventModal(false)} onSave={data => upsertAppointment.mutate(data)} />}
+      {addChildModal && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
+          <form onSubmit={e => { e.preventDefault(); const fd = new FormData(e.currentTarget); addChild.mutate({ name: fd.get("name") as string, birth_date: fd.get("birth_date") as string }); setAddChildModal(false); }}
+            className="bg-slate-900 border border-slate-700 rounded-2xl p-5 w-full max-w-xs space-y-4">
+            <div className="flex items-center justify-between">
+              <h3 className="font-semibold text-theme">הוסף תינוק/ת</h3>
+              <button type="button" onClick={() => setAddChildModal(false)} className="text-theme-muted hover:text-theme"><Icon name="x" className="w-4 h-4" /></button>
+            </div>
+            <div><label className="text-xs text-theme-muted block mb-1">שם *</label><input name="name" required className="input-base w-full" placeholder="לילה" /></div>
+            <div><label className="text-xs text-theme-muted block mb-1">תאריך לידה *</label><input name="birth_date" type="date" required className="input-base w-full" /></div>
+            <button type="submit" className="w-full bg-accent-600 hover:bg-accent-500 text-white font-medium py-2 rounded-lg text-sm transition-colors">הוסף</button>
+          </form>
+        </div>
+      )}
+      {pendingDeleteChild && (
+        <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4">
+          <div className="w-full max-w-md rounded-2xl border border-slate-700 bg-slate-900 p-5">
+            <div className="flex items-center gap-2 mb-1">
+              <Icon name="warning" className="w-5 h-5 text-red-400" />
+              <h3 className="text-base font-semibold text-theme">למחוק את {pendingDeleteChild.name}?</h3>
+            </div>
+            <p className="text-sm text-theme-muted mt-1">כל הנתונים של תינוק/ת זו יימחקו.</p>
+            <div className="flex justify-end gap-2 mt-4">
+              <button onClick={() => setPendingDeleteChild(null)} className="px-3 py-2 rounded-lg text-sm bg-slate-800 text-theme-muted hover:bg-slate-700">ביטול</button>
+              <button onClick={() => { deleteChild.mutate(pendingDeleteChild.id); setPendingDeleteChild(null); setActiveChild(""); }}
+                className="px-3 py-2 rounded-lg text-sm bg-red-600 text-white hover:bg-red-500">מחיקה</button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

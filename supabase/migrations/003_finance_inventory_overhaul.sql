@@ -277,7 +277,7 @@ on conflict (household_id, name) do nothing;
 
 -- Add missing Hebrew expense categories for existing households
 insert into public.categories (household_id, transaction_type, name, is_system)
-select h.id, cats.tx_type, cats.name, true
+select h.id, cats.tx_type::transaction_type, cats.name, true
 from public.households h
 cross join (values
   ('expense', 'קניות'),

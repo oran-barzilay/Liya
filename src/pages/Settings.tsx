@@ -3,6 +3,9 @@ import { useThemeStore, ACCENT_OPTIONS, THEME_PRESETS, getContrastColor } from "
 import { useProfile } from "../hooks/useProfile";
 import { useChildren } from "../hooks/useBaby";
 import Icon from "../components/Icon";
+import { supabase } from "../lib/supabase";
+import { useQueryClient } from "@tanstack/react-query";
+import { useAuth } from "../contexts/AuthContext";
 
 export default function Settings() {
   const {
@@ -25,6 +28,8 @@ export default function Settings() {
     applyPalette,
     removePalette,
   } = useThemeStore();
+  const { user } = useAuth();
+  const qc = useQueryClient();
   const { data: profile } = useProfile();
   const { data: children = [], addChild, deleteChild } = useChildren();
   const [paletteName, setPaletteName] = useState("");
@@ -33,6 +38,51 @@ export default function Settings() {
   const [newChildName, setNewChildName] = useState("");
   const [newChildBirth, setNewChildBirth] = useState("");
   const [pendingDeleteChild, setPendingDeleteChild] = useState<Record<string, any> | null>(null);
+
+  // Household ID copy
+  const [copied, setCopied] = useState(false);
+  const copyHouseholdId = () => {
+    if (!profile?.household_id) return;
+    navigator.clipboard.writeText(profile.household_id);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  // Change household
+  const [showChangeHousehold, setShowChangeHousehold] = useState(false);
+  const [newHouseholdId, setNewHouseholdId] = useState("");
+  const [changeLoading, setChangeLoading] = useState(false);
+  const [changeError, setChangeError] = useState("");
+  const [changeSuccess, setChangeSuccess] = useState(false);
+
+  const handleChangeHousehold = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!user || !newHouseholdId.trim()) return;
+    setChangeLoading(true);
+    setChangeError("");
+    setChangeSuccess(false);
+    try {
+      const { error } = await supabase.rpc("change_household", {
+        p_household_id: newHouseholdId.trim(),
+      });
+      if (error) throw error;
+      setChangeSuccess(true);
+      setNewHouseholdId("");
+      setShowChangeHousehold(false);
+      qc.invalidateQueries({ queryKey: ["profile", user.id] });
+      // Invalidate all household-scoped queries
+      qc.invalidateQueries();
+    } catch (err: unknown) {
+      let msg = "שגיאה בשינוי הבית";
+      if (err && typeof err === "object") {
+        // @ts-ignore
+        msg = err.message || err.details || JSON.stringify(err);
+      }
+      setChangeError(msg);
+    } finally {
+      setChangeLoading(false);
+    }
+  };
 
   // Warn if text on background has low contrast
   const appContrast = getContrastColor(appBg);
@@ -295,9 +345,73 @@ export default function Settings() {
             <span className="text-theme-muted">תפקיד</span>
             <span className="text-theme">{profile?.role === "owner" ? "בעל הבית" : "חבר"}</span>
           </div>
-          <div className="flex items-center justify-between py-2">
-            <span className="text-theme-muted">מזהה בית</span>
-            <code className="text-xs text-theme-muted font-mono">{profile?.household_id?.slice(0, 8)}...</code>
+          {/* Household ID – full, copyable */}
+          <div className="py-2 border-b border-slate-800">
+            <div className="flex items-center justify-between mb-1">
+              <span className="text-theme-muted">מזהה בית</span>
+              <button
+                onClick={copyHouseholdId}
+                className="flex items-center gap-1 text-xs px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 text-theme-muted hover:text-theme transition-colors"
+                title="העתק מזהה בית"
+              >
+                <Icon name={copied ? "check" : "copy"} className="w-3 h-3" />
+                {copied ? "הועתק!" : "העתק"}
+              </button>
+            </div>
+            <code className="block text-xs text-theme-muted font-mono break-all select-all bg-slate-800 rounded px-2 py-1.5 mt-1">
+              {profile?.household_id ?? "—"}
+            </code>
+            <p className="text-xs text-theme-muted mt-1.5">שתף מזהה זה עם בני הבית שלך כדי שיוכלו להצטרף.</p>
+          </div>
+
+          {/* Change household */}
+          <div className="py-2">
+            {changeSuccess && (
+              <p className="text-green-400 text-xs bg-green-950/50 border border-green-800 rounded-lg px-3 py-2 mb-2 flex items-center gap-2">
+                <Icon name="check" className="w-3.5 h-3.5 shrink-0" /> הבית עודכן בהצלחה!
+              </p>
+            )}
+            {!showChangeHousehold ? (
+              <button
+                onClick={() => { setShowChangeHousehold(true); setChangeError(""); setChangeSuccess(false); }}
+                className="flex items-center gap-1.5 text-xs text-accent-400 hover:text-accent-300 transition-colors"
+              >
+                <Icon name="link" className="w-3.5 h-3.5" /> הצטרף לבית אחר / שנה בית
+              </button>
+            ) : (
+              <form onSubmit={handleChangeHousehold} className="space-y-2 mt-1">
+                <label className="text-xs text-theme-muted block">מזהה הבית החדש</label>
+                <input
+                  type="text"
+                  value={newHouseholdId}
+                  onChange={e => setNewHouseholdId(e.target.value)}
+                  placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+                  className="input-base w-full font-mono text-xs"
+                  required
+                />
+                {changeError && (
+                  <p className="text-red-400 text-xs bg-red-950/50 border border-red-800 rounded-lg px-2 py-1.5 flex items-center gap-1.5">
+                    <Icon name="warning" className="w-3.5 h-3.5 shrink-0" /> {changeError}
+                  </p>
+                )}
+                <div className="flex items-center gap-2">
+                  <button
+                    type="submit"
+                    disabled={changeLoading || !newHouseholdId.trim()}
+                    className="bg-accent-600 hover:bg-accent-500 disabled:opacity-50 text-white text-xs font-medium px-3 py-1.5 rounded-lg transition-colors"
+                  >
+                    {changeLoading ? "מעדכן…" : "עבור לבית"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => { setShowChangeHousehold(false); setChangeError(""); setNewHouseholdId(""); }}
+                    className="text-xs px-3 py-1.5 rounded-lg bg-slate-800 text-theme-muted hover:bg-slate-700"
+                  >
+                    ביטול
+                  </button>
+                </div>
+              </form>
+            )}
           </div>
         </div>
       </section>

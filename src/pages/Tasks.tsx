@@ -1,10 +1,9 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { useTasks } from "../hooks/useTasks";
 import { useUiStore } from "../state/stores/uiStore";
 import Icon from "../components/Icon";
-
+import AppCalendar from "../components/AppCalendar";
 type Task = Record<string, any>;
-
 const STATUS_LABEL: Record<string, string> = { todo: "לביצוע", in_progress: "בביצוע", done: "בוצע" };
 const STATUS_COLOR: Record<string, string> = {
   todo: "border-slate-700",
@@ -19,20 +18,54 @@ const PRIORITY_BADGE: Record<number, string> = {
   5: "bg-slate-800 text-slate-400",
 };
 const STATUSES = ["todo", "in_progress", "done"] as const;
-
-function TaskCard({ task, onStatusChange, onDelete, onEdit }: { task: Task; onStatusChange: (s: string) => void; onDelete: () => void; onEdit: () => void }) {
+const DAY_LABELS = ["א", "ב", "ג", "ד", "ה", "ו", "ש"];
+function getNextOccurrence(recurrenceRule: string | null): string | null {
+  if (!recurrenceRule) return null;
+  try {
+    const rule = JSON.parse(recurrenceRule);
+    const days: number[] = rule.days ?? [];
+    const time: string = rule.time ?? "09:00";
+    if (!days.length) return null;
+    const now = new Date();
+    for (let i = 1; i <= 7; i++) {
+      const next = new Date(now);
+      next.setDate(next.getDate() + i);
+      if (days.includes(next.getDay())) {
+        const [h, m] = time.split(":").map(Number);
+        next.setHours(h, m, 0, 0);
+        return next.toISOString().slice(0, 16);
+      }
+    }
+  } catch {}
+  return null;
+}
+function addDays(date: string, n: number): string {
+  const d = new Date(date + "T12:00:00");
+  d.setDate(d.getDate() + n);
+  return d.toISOString().slice(0, 10);
+}
+function formatDayHeader(date: string) {
+  return new Date(date + "T12:00:00").toLocaleDateString("he-IL", {
+    weekday: "short",
+    month: "numeric",
+    day: "numeric",
+  });
+}
+function TaskCard({ task, onStatusChange, onDelete, onEdit }: {
+  task: Task; onStatusChange: (s: string) => void; onDelete: () => void; onEdit: () => void;
+}) {
   const nextStatus: Record<string, string> = { todo: "in_progress", in_progress: "done", done: "todo" };
   return (
     <div className="bg-slate-900 border border-slate-800 rounded-xl p-3 space-y-2 group">
       <div className="flex items-start justify-between gap-2">
-        <span className="text-sm font-medium leading-snug text-theme">{task.title}</span>
+        <div className="flex items-center gap-1.5 min-w-0">
+          {task.is_recurring && <Icon name="repeat" className="w-3 h-3 text-accent-400 shrink-0" title="חזרתי" />}
+          {task.module === "inventory" && <Icon name="layers" className="w-3 h-3 text-amber-400 shrink-0" title="מלאי" />}
+          <span className="text-sm font-medium leading-snug text-theme truncate">{task.title}</span>
+        </div>
         <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
-          <button onClick={onEdit} className="text-slate-600 hover:text-accent-400">
-            <Icon name="edit" className="w-3.5 h-3.5" />
-          </button>
-          <button onClick={onDelete} className="text-slate-600 hover:text-red-400">
-            <Icon name="trash" className="w-3.5 h-3.5" />
-          </button>
+          <button onClick={onEdit} className="text-slate-600 hover:text-accent-400"><Icon name="edit" className="w-3.5 h-3.5" /></button>
+          <button onClick={onDelete} className="text-slate-600 hover:text-red-400"><Icon name="trash" className="w-3.5 h-3.5" /></button>
         </div>
       </div>
       {task.description && <p className="text-xs text-theme-muted line-clamp-2">{task.description}</p>}
@@ -47,14 +80,34 @@ function TaskCard({ task, onStatusChange, onDelete, onEdit }: { task: Task; onSt
     </div>
   );
 }
-
-function AddTaskModal({
-  onClose,
-  onAdd,
-  members,
-}: {
-  onClose: () => void;
-  onAdd: (t: any) => void;
+function RecurrenceField({ days, setDays, time, setTime }: {
+  days: number[]; setDays: (d: number[]) => void;
+  time: string; setTime: (t: string) => void;
+}) {
+  const toggle = (d: number) => setDays(days.includes(d) ? days.filter((x) => x !== d) : [...days, d].sort());
+  return (
+    <div className="space-y-2">
+      <div>
+        <label className="text-xs text-theme-muted block mb-1.5">ימי חזרה</label>
+        <div className="flex gap-1.5">
+          {DAY_LABELS.map((lbl, idx) => (
+            <button key={idx} type="button" onClick={() => toggle(idx)}
+              className={"w-8 h-8 rounded-lg text-xs font-medium border transition-colors " +
+                (days.includes(idx) ? "bg-accent-600 border-accent-600 text-white" : "border-slate-700 text-theme-muted hover:border-accent-500")}>
+              {lbl}
+            </button>
+          ))}
+        </div>
+      </div>
+      <div>
+        <label className="text-xs text-theme-muted block mb-1">שעת ביצוע</label>
+        <input type="time" value={time} onChange={(e) => setTime(e.target.value)} className="input-base text-sm" />
+      </div>
+    </div>
+  );
+}
+function AddTaskModal({ onClose, onAdd, members }: {
+  onClose: () => void; onAdd: (t: any) => void;
   members: Array<{ id: string; display_name: string }>;
 }) {
   const [title, setTitle] = useState("");
@@ -64,33 +117,29 @@ function AddTaskModal({
   const [scheduledStart, setScheduledStart] = useState("");
   const [desc, setDesc] = useState("");
   const [assignedTo, setAssignedTo] = useState("");
-
+  const [isRecurring, setIsRecurring] = useState(false);
+  const [recurDays, setRecurDays] = useState<number[]>([]);
+  const [recurTime, setRecurTime] = useState("09:00");
   return (
-    <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
+    <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4 overflow-y-auto">
       <form
         onSubmit={(e) => {
           e.preventDefault();
+          const recurrenceRule = isRecurring ? JSON.stringify({ days: recurDays, time: recurTime }) : null;
           onAdd({
-            title,
-            task_type: taskType,
-            status: "todo",
-            module: "general",
-            source_type: "manual",
+            title, task_type: taskType, status: "todo", module: "general", source_type: "manual",
             priority_level: taskType === "priority" ? Number(priority) : null,
-            due_at: dueAt || null,
-            scheduled_start_at: scheduledStart || null,
-            description: desc || null,
-            assigned_to: assignedTo || null,
+            due_at: dueAt || null, scheduled_start_at: scheduledStart || null,
+            description: desc || null, assigned_to: assignedTo || null,
+            is_recurring: isRecurring, recurrence_rule: recurrenceRule,
           });
           onClose();
         }}
-        className="bg-slate-900 border border-slate-700 rounded-2xl p-5 w-full max-w-md space-y-4"
+        className="bg-slate-900 border border-slate-700 rounded-2xl p-5 w-full max-w-md space-y-4 my-4"
       >
         <div className="flex items-center justify-between">
           <h3 className="font-semibold text-theme">משימה חדשה</h3>
-          <button type="button" onClick={onClose} className="text-theme-muted hover:text-theme">
-            <Icon name="x" className="w-4 h-4" />
-          </button>
+          <button type="button" onClick={onClose} className="text-theme-muted hover:text-theme"><Icon name="x" className="w-4 h-4" /></button>
         </div>
         <div>
           <label className="text-xs text-theme-muted block mb-1">כותרת *</label>
@@ -108,11 +157,7 @@ function AddTaskModal({
             <div>
               <label className="text-xs text-theme-muted block mb-1">עדיפות (1=גבוה)</label>
               <select value={priority} onChange={(e) => setPriority(e.target.value)} className="input-base w-full">
-                {[1, 2, 3, 4, 5].map((p) => (
-                  <option key={p} value={p}>
-                    P{p}
-                  </option>
-                ))}
+                {[1,2,3,4,5].map((p) => <option key={p} value={p}>P{p}</option>)}
               </select>
             </div>
           )}
@@ -121,27 +166,31 @@ function AddTaskModal({
           <label className="text-xs text-theme-muted block mb-1">אחראי</label>
           <select value={assignedTo} onChange={(e) => setAssignedTo(e.target.value)} className="input-base w-full">
             <option value="">ללא שיוך</option>
-            {members.map((m) => (
-              <option key={m.id} value={m.id}>
-                {m.display_name}
-              </option>
-            ))}
+            {members.map((m) => <option key={m.id} value={m.id}>{m.display_name}</option>)}
           </select>
         </div>
         {taskType === "priority" ? (
-          <div>
-            <label className="text-xs text-theme-muted block mb-1">תאריך יעד</label>
-            <input type="datetime-local" value={dueAt} onChange={(e) => setDueAt(e.target.value)} className="input-base w-full" />
-          </div>
+          <AppCalendar label="תאריך יעד" value={dueAt} onChange={setDueAt} mode="datetime" placeholder="בחר תאריך ושעה" />
         ) : (
-          <div>
-            <label className="text-xs text-theme-muted block mb-1">מועד מתוזמן</label>
-            <input type="datetime-local" value={scheduledStart} onChange={(e) => setScheduledStart(e.target.value)} className="input-base w-full" />
-          </div>
+          <AppCalendar label="מועד מתוזמן" value={scheduledStart} onChange={setScheduledStart} mode="datetime" placeholder="בחר תאריך ושעה" />
         )}
         <div>
           <label className="text-xs text-theme-muted block mb-1">תיאור</label>
           <textarea value={desc} onChange={(e) => setDesc(e.target.value)} rows={2} className="input-base w-full resize-none" placeholder="פרטים נוספים..." />
+        </div>
+        <div className="border-t border-slate-700 pt-3">
+          <label className="flex items-center gap-2 cursor-pointer select-none">
+            <input type="checkbox" checked={isRecurring} onChange={(e) => setIsRecurring(e.target.checked)}
+              className="w-4 h-4 rounded border-slate-600 bg-slate-800 accent-accent-600" />
+            <span className="text-sm text-theme flex items-center gap-1.5">
+              <Icon name="repeat" className="w-3.5 h-3.5 text-accent-400" /> משימה חזרתית
+            </span>
+          </label>
+          {isRecurring && (
+            <div className="mt-3">
+              <RecurrenceField days={recurDays} setDays={setRecurDays} time={recurTime} setTime={setRecurTime} />
+            </div>
+          )}
         </div>
         <button type="submit" className="w-full bg-accent-600 hover:bg-accent-500 text-white font-medium py-2 rounded-lg text-sm transition-colors">
           הוסף משימה
@@ -150,11 +199,8 @@ function AddTaskModal({
     </div>
   );
 }
-
 function EditTaskModal({ task, onClose, onSave, members }: {
-  task: Task;
-  onClose: () => void;
-  onSave: (t: Task) => void;
+  task: Task; onClose: () => void; onSave: (t: Task) => void;
   members: Array<{ id: string; display_name: string }>;
 }) {
   const [title, setTitle] = useState(task.title ?? "");
@@ -164,31 +210,32 @@ function EditTaskModal({ task, onClose, onSave, members }: {
   const [desc, setDesc] = useState(task.description ?? "");
   const [assignedTo, setAssignedTo] = useState(task.assigned_to ?? "");
   const [status, setStatus] = useState(task.status ?? "todo");
-
+  const [isRecurring, setIsRecurring] = useState(task.is_recurring ?? false);
+  const [recurDays, setRecurDays] = useState<number[]>(() => {
+    try { return JSON.parse(task.recurrence_rule ?? "{}").days ?? []; } catch { return []; }
+  });
+  const [recurTime, setRecurTime] = useState(() => {
+    try { return JSON.parse(task.recurrence_rule ?? "{}").time ?? "09:00"; } catch { return "09:00"; }
+  });
   return (
-    <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
+    <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4 overflow-y-auto">
       <form
         onSubmit={(e) => {
           e.preventDefault();
+          const recurrenceRule = isRecurring ? JSON.stringify({ days: recurDays, time: recurTime }) : null;
           onSave({
-            id: task.id,
-            title,
-            status,
+            id: task.id, title, status, assigned_to: assignedTo || null,
             priority_level: task.task_type === "priority" ? Number(priority) : task.priority_level,
-            due_at: dueAt || null,
-            scheduled_start_at: scheduledStart || null,
-            description: desc || null,
-            assigned_to: assignedTo || null,
+            due_at: dueAt || null, scheduled_start_at: scheduledStart || null,
+            description: desc || null, is_recurring: isRecurring, recurrence_rule: recurrenceRule,
           });
           onClose();
         }}
-        className="bg-slate-900 border border-slate-700 rounded-2xl p-5 w-full max-w-md space-y-4"
+        className="bg-slate-900 border border-slate-700 rounded-2xl p-5 w-full max-w-md space-y-4 my-4"
       >
         <div className="flex items-center justify-between">
           <h3 className="font-semibold text-theme">עריכת משימה</h3>
-          <button type="button" onClick={onClose} className="text-theme-muted hover:text-theme">
-            <Icon name="x" className="w-4 h-4" />
-          </button>
+          <button type="button" onClick={onClose} className="text-theme-muted hover:text-theme"><Icon name="x" className="w-4 h-4" /></button>
         </div>
         <div>
           <label className="text-xs text-theme-muted block mb-1">כותרת *</label>
@@ -207,7 +254,7 @@ function EditTaskModal({ task, onClose, onSave, members }: {
             <div>
               <label className="text-xs text-theme-muted block mb-1">עדיפות</label>
               <select value={priority} onChange={(e) => setPriority(e.target.value)} className="input-base w-full">
-                {[1, 2, 3, 4, 5].map((p) => <option key={p} value={p}>P{p}</option>)}
+                {[1,2,3,4,5].map((p) => <option key={p} value={p}>P{p}</option>)}
               </select>
             </div>
           )}
@@ -220,48 +267,74 @@ function EditTaskModal({ task, onClose, onSave, members }: {
           </select>
         </div>
         {task.task_type === "priority" ? (
-          <div>
-            <label className="text-xs text-theme-muted block mb-1">תאריך יעד</label>
-            <input type="datetime-local" value={dueAt} onChange={(e) => setDueAt(e.target.value)} className="input-base w-full" />
-          </div>
+          <AppCalendar label="תאריך יעד" value={dueAt} onChange={setDueAt} mode="datetime" placeholder="בחר תאריך ושעה" />
         ) : (
-          <div>
-            <label className="text-xs text-theme-muted block mb-1">מועד מתוזמן</label>
-            <input type="datetime-local" value={scheduledStart} onChange={(e) => setScheduledStart(e.target.value)} className="input-base w-full" />
-          </div>
+          <AppCalendar label="מועד מתוזמן" value={scheduledStart} onChange={setScheduledStart} mode="datetime" placeholder="בחר תאריך ושעה" />
         )}
         <div>
           <label className="text-xs text-theme-muted block mb-1">תיאור</label>
           <textarea value={desc} onChange={(e) => setDesc(e.target.value)} rows={2} className="input-base w-full resize-none" />
         </div>
-        <button type="submit" className="w-full bg-accent-600 hover:bg-accent-500 text-white font-medium py-2 rounded-lg text-sm transition-colors">
-          שמור שינויים
-        </button>
+        <div className="border-t border-slate-700 pt-3">
+          <label className="flex items-center gap-2 cursor-pointer select-none">
+            <input type="checkbox" checked={isRecurring} onChange={(e) => setIsRecurring(e.target.checked)} className="w-4 h-4 rounded border-slate-600 bg-slate-800" />
+            <span className="text-sm text-theme flex items-center gap-1.5">
+              <Icon name="repeat" className="w-3.5 h-3.5 text-accent-400" /> משימה חזרתית
+            </span>
+          </label>
+          {isRecurring && (
+            <div className="mt-3">
+              <RecurrenceField days={recurDays} setDays={setRecurDays} time={recurTime} setTime={setRecurTime} />
+            </div>
+          )}
+        </div>
+        <button type="submit" className="w-full bg-accent-600 hover:bg-accent-500 text-white font-medium py-2 rounded-lg text-sm transition-colors">שמור שינויים</button>
       </form>
     </div>
   );
 }
-
 export default function Tasks() {
   const { data: tasks = [], createTask, updateTask, deleteTask, members = [] } = useTasks();
-  const { taskBoardView, setTaskBoardView, selectedDate } = useUiStore();
+  const { taskBoardView, setTaskBoardView, selectedDate, setSelectedDate } = useUiStore();
   const [showModal, setShowModal] = useState(false);
   const [pendingDelete, setPendingDelete] = useState<string | null>(null);
   const [editingTask, setEditingTask] = useState<Task | null>(null);
   const [filterType, setFilterType] = useState<"all" | "priority" | "time_sensitive">("all");
   const [filterAssignee, setFilterAssignee] = useState<string>("all");
-
+  const [timelineMode, setTimelineMode] = useState<"1" | "3" | "7">("1");
+  const [showCalPicker, setShowCalPicker] = useState(false);
+  const calPickerRef = useRef<HTMLDivElement>(null);
   const visible = tasks.filter((t) => {
     if (t.status === "cancelled") return false;
     if (filterType !== "all" && t.task_type !== filterType) return false;
     if (filterAssignee !== "all" && t.assigned_to !== filterAssignee) return false;
     return true;
   });
-
-  const handleStatusChange = (id: string, status: string) => updateTask.mutate({ id, status });
-
+  const handleStatusChange = (id: string, status: string, task?: Task) => {
+    updateTask.mutate({ id, status });
+    // If recurring and being set to done, create next occurrence
+    if (status === "done" && task?.is_recurring && task?.recurrence_rule) {
+      const nextDate = getNextOccurrence(task.recurrence_rule);
+      if (nextDate) {
+        createTask.mutate({
+          title: task.title,
+          description: task.description,
+          task_type: task.task_type,
+          module: task.module,
+          source_type: "recurring",
+          priority_level: task.priority_level,
+          scheduled_start_at: task.task_type === "time_sensitive" ? nextDate : null,
+          due_at: task.task_type === "priority" ? nextDate : null,
+          is_recurring: true,
+          recurrence_rule: task.recurrence_rule,
+          assigned_to: task.assigned_to,
+          status: "todo",
+        });
+      }
+    }
+  };
   const KanbanView = () => (
-    <div className="grid grid-cols-3 gap-4">
+    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
       {STATUSES.map((status) => {
         const col = visible.filter((t) => t.status === status);
         return (
@@ -272,15 +345,18 @@ export default function Tasks() {
             </div>
             <div className="space-y-2">
               {col.map((task) => (
-                <TaskCard key={task.id} task={task} onStatusChange={(s) => handleStatusChange(task.id, s)} onDelete={() => setPendingDelete(task.id)} onEdit={() => setEditingTask(task)} />
+                <TaskCard key={task.id} task={task}
+                  onStatusChange={(s) => handleStatusChange(task.id, s, task)}
+                  onDelete={() => setPendingDelete(task.id)}
+                  onEdit={() => setEditingTask(task)} />
               ))}
+              {col.length === 0 && <div className="text-xs text-slate-600 text-center py-4">ריק</div>}
             </div>
           </div>
         );
       })}
     </div>
   );
-
   const ListView = () => {
     const sorted = [...visible].sort((a, b) => {
       if (a.status === "done" && b.status !== "done") return 1;
@@ -292,69 +368,121 @@ export default function Tasks() {
         {sorted.map((task) => (
           <div key={task.id} className="flex items-center gap-3 bg-slate-900 border border-slate-800 rounded-xl px-4 py-3">
             <button
-              onClick={() => handleStatusChange(task.id, task.status === "done" ? "todo" : "done")}
-              className={
-                "w-4 h-4 rounded border shrink-0 flex items-center justify-center " +
-                (task.status === "done" ? "bg-emerald-600 border-emerald-600 text-white" : "border-slate-600")
-              }
-            >
+              onClick={() => handleStatusChange(task.id, task.status === "done" ? "todo" : "done", task)}
+              className={"w-4 h-4 rounded border shrink-0 flex items-center justify-center " +
+                (task.status === "done" ? "bg-emerald-600 border-emerald-600 text-white" : "border-slate-600")}>
               {task.status === "done" && <Icon name="check" className="w-3 h-3" />}
             </button>
             <div className="flex-1 min-w-0">
-              <span className={"text-sm font-medium " + (task.status === "done" ? "line-through text-theme-muted opacity-60" : "text-theme")}>{task.title}</span>
+              <div className="flex items-center gap-1.5">
+                {task.is_recurring && <Icon name="repeat" className="w-3 h-3 text-accent-400 shrink-0" />}
+                <span className={"text-sm font-medium " + (task.status === "done" ? "line-through text-theme-muted opacity-60" : "text-theme")}>{task.title}</span>
+              </div>
               {task.description && <p className="text-xs text-theme-muted truncate opacity-70">{task.description}</p>}
             </div>
             {task.priority_level && <span className={"text-xs px-2 py-0.5 rounded-full font-medium " + PRIORITY_BADGE[task.priority_level]}>P{task.priority_level}</span>}
             {task.due_at && <span className="text-xs text-theme-muted hidden sm:block">{new Date(task.due_at).toLocaleDateString("he-IL")}</span>}
-            <button onClick={() => setEditingTask(task)} className="text-slate-600 hover:text-accent-400 transition-colors">
-              <Icon name="edit" className="w-3.5 h-3.5" />
-            </button>
-            <button onClick={() => setPendingDelete(task.id)} className="text-slate-600 hover:text-red-400 transition-colors">
-              <Icon name="trash" className="w-3.5 h-3.5" />
-            </button>
+            <button onClick={() => setEditingTask(task)} className="text-slate-600 hover:text-accent-400 transition-colors"><Icon name="edit" className="w-3.5 h-3.5" /></button>
+            <button onClick={() => setPendingDelete(task.id)} className="text-slate-600 hover:text-red-400 transition-colors"><Icon name="trash" className="w-3.5 h-3.5" /></button>
           </div>
         ))}
         {sorted.length === 0 && <div className="text-center py-12 text-slate-500">אין משימות עדיין. הוסף אחת.</div>}
       </div>
     );
   };
-
   const TimelineView = () => {
-    const dayTasks = visible.filter((t) => t.task_type === "time_sensitive" && t.scheduled_start_at?.slice(0, 10) === selectedDate);
+    const nDays = Number(timelineMode);
+    const dates: string[] = [];
+    for (let i = 0; i < nDays; i++) dates.push(addDays(selectedDate, i));
+    const prevPeriod = () => setSelectedDate(addDays(selectedDate, -nDays));
+    const nextPeriod = () => setSelectedDate(addDays(selectedDate, +nDays));
+    const dayTasksFor = (date: string) =>
+      visible.filter((t) => t.task_type === "time_sensitive" && t.scheduled_start_at?.slice(0, 10) === date);
+    const dateRangeLabel = nDays === 1
+      ? new Date(selectedDate + "T12:00:00").toLocaleDateString("he-IL", { weekday: "long", month: "long", day: "numeric" })
+      : `${new Date(dates[0] + "T12:00:00").toLocaleDateString("he-IL", { month: "numeric", day: "numeric" })} – ${new Date(dates[dates.length - 1] + "T12:00:00").toLocaleDateString("he-IL", { month: "numeric", day: "numeric" })}`;
     return (
       <div>
-        <div className="flex items-center gap-2 mb-4 text-sm text-slate-400">
-          <Icon name="calendar" className="w-4 h-4" />
-          <span>{new Date(selectedDate + "T12:00:00").toLocaleDateString("he-IL", { weekday: "long", month: "long", day: "numeric" })}</span>
-        </div>
-        <div className="space-y-1">
-          {Array.from({ length: 24 }, (_, h) => {
-            const hTasks = dayTasks.filter((t) => new Date(t.scheduled_start_at).getHours() === h);
-            return (
-              <div key={h} className="flex gap-3">
-                <span className="text-xs text-slate-600 w-10 shrink-0 pt-1.5 text-left">{String(h).padStart(2, "0")}:00</span>
-                <div className="flex-1 min-h-[2rem] border-r border-slate-800 pr-3 pb-1">
-                  {hTasks.map((t) => (
-                    <div key={t.id} className="bg-accent-900/40 border border-accent-800 rounded-lg px-3 py-1.5 mb-1 flex items-center justify-between">
-                      <span className="text-sm">{t.title}</span>
-                      <button
-                        onClick={() => handleStatusChange(t.id, t.status === "done" ? "todo" : "done")}
-                        className={"text-xs px-2 py-0.5 rounded-full " + (t.status === "done" ? "bg-emerald-900 text-emerald-300" : "bg-slate-800 text-slate-400")}
-                      >
-                        {t.status === "done" ? "בוצע" : "סמן כבוצע"}
-                      </button>
-                    </div>
-                  ))}
-                </div>
+        {/* Timeline Controls */}
+        <div className="flex items-center gap-2 mb-4 flex-wrap">
+          <div className="flex items-center gap-1">
+            <button onClick={prevPeriod} className="p-1.5 rounded-lg bg-slate-900 border border-slate-800 text-theme-muted hover:text-theme transition-colors">
+              <Icon name="chevron-right" className="w-4 h-4" />
+            </button>
+            <span className="text-sm font-medium text-theme px-2 min-w-36 text-center">{dateRangeLabel}</span>
+            <button onClick={nextPeriod} className="p-1.5 rounded-lg bg-slate-900 border border-slate-800 text-theme-muted hover:text-theme transition-colors">
+              <Icon name="chevron-left" className="w-4 h-4" />
+            </button>
+          </div>
+          <div className="flex rounded-lg bg-slate-900 border border-slate-800 p-0.5">
+            {([["1","יום"],["3","3 ימים"],["7","שבוע"]] as const).map(([v, lbl]) => (
+              <button key={v} onClick={() => setTimelineMode(v as "1"|"3"|"7")}
+                className={"px-3 py-1.5 rounded-md text-xs font-medium transition-colors " +
+                  (timelineMode === v ? "bg-accent-700 text-white" : "text-theme-muted hover:text-theme")}>
+                {lbl}
+              </button>
+            ))}
+          </div>
+          <div ref={calPickerRef} className="relative">
+            <button onClick={() => setShowCalPicker(!showCalPicker)}
+              className="p-1.5 rounded-lg bg-slate-900 border border-slate-800 text-theme-muted hover:text-accent-400 transition-colors">
+              <Icon name="calendar" className="w-4 h-4" />
+            </button>
+            {showCalPicker && (
+              <div className="absolute top-full mt-1 z-50 left-0">
+                <AppCalendar value={selectedDate} onChange={(d) => { setSelectedDate(d); setShowCalPicker(false); }} inline />
               </div>
-            );
-          })}
+            )}
+          </div>
         </div>
-        {dayTasks.length === 0 && <div className="text-center py-12 text-slate-500">אין משימות מתוזמנות להיום.</div>}
+        {/* Grid */}
+        <div className="overflow-x-auto">
+          <div style={{ minWidth: nDays > 1 ? nDays * 200 + 48 : "auto" }}>
+            {/* Day column headers (multi-day only) */}
+            {nDays > 1 && (
+              <div className="grid mb-1" style={{ gridTemplateColumns: `3rem repeat(${nDays}, 1fr)` }}>
+                <div />
+                {dates.map((d) => (
+                  <div key={d} className={"text-center text-xs py-2 font-medium rounded-t-lg " +
+                    (d === new Date().toISOString().slice(0,10) ? "text-accent-400" : "text-theme-muted")}>
+                    {formatDayHeader(d)}
+                  </div>
+                ))}
+              </div>
+            )}
+            {/* Hour rows */}
+            <div className="space-y-0.5">
+              {Array.from({ length: 24 }, (_, h) => (
+                <div key={h} className="grid" style={{ gridTemplateColumns: nDays > 1 ? `3rem repeat(${nDays}, 1fr)` : "3rem 1fr" }}>
+                  <span className="text-xs text-slate-600 pt-1.5 text-center">{String(h).padStart(2,"0")}:00</span>
+                  {dates.map((d) => {
+                    const hTasks = dayTasksFor(d).filter((t) => new Date(t.scheduled_start_at).getHours() === h);
+                    return (
+                      <div key={d} className={"border-r border-slate-800 px-1 pb-1 min-h-8 " + (nDays === 1 ? "flex-1" : "")}>
+                        {hTasks.map((t) => (
+                          <div key={t.id} className="bg-accent-900/40 border border-accent-800 rounded-lg px-2 py-1 mb-0.5 flex items-center justify-between gap-1">
+                            <span className="text-xs text-theme truncate">{t.title}</span>
+                            <button onClick={() => handleStatusChange(t.id, t.status === "done" ? "todo" : "done", t)}
+                              className={"text-xs px-1.5 py-0.5 rounded-full shrink-0 " +
+                                (t.status === "done" ? "bg-emerald-900 text-emerald-300" : "bg-slate-800 text-slate-400")}>
+                              {t.status === "done" ? "✓" : "○"}
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    );
+                  })}
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+        {visible.filter((t) => t.task_type === "time_sensitive" && dates.includes(t.scheduled_start_at?.slice(0,10))).length === 0 && (
+          <div className="text-center py-8 text-slate-500 text-sm">אין משימות מתוזמנות בטווח הזמן הזה.</div>
+        )}
       </div>
     );
   };
-
   return (
     <div>
       <div className="flex items-center justify-between mb-6">
@@ -366,41 +494,36 @@ export default function Tasks() {
           <Icon name="plus" className="w-3.5 h-3.5" /> הוספת משימה
         </button>
       </div>
-
       <div className="flex items-center gap-3 mb-5 flex-wrap">
         <div className="flex rounded-lg bg-slate-900 border border-slate-800 p-0.5">
           {(["all", "priority", "time_sensitive"] as const).map((f) => (
-            <button key={f} onClick={() => setFilterType(f)} className={"px-3 py-1.5 rounded-md text-xs font-medium transition-colors " + (filterType === f ? "bg-slate-700 text-theme" : "text-theme-muted hover:text-theme")}>
+            <button key={f} onClick={() => setFilterType(f)}
+              className={"px-3 py-1.5 rounded-md text-xs font-medium transition-colors " +
+                (filterType === f ? "bg-slate-700 text-theme" : "text-theme-muted hover:text-theme")}>
               {f === "all" ? "הכל" : f === "priority" ? "עדיפות" : "מתוזמן"}
             </button>
           ))}
         </div>
-
         <select value={filterAssignee} onChange={(e) => setFilterAssignee(e.target.value)} className="input-base text-xs py-1.5">
           <option value="all">כל המשפחה</option>
           <option value="">ללא אחראי</option>
-          {members.map((m) => (
-            <option key={m.id} value={m.id}>
-              {m.display_name}
-            </option>
-          ))}
+          {members.map((m) => <option key={m.id} value={m.id}>{m.display_name}</option>)}
         </select>
-
         <div className="flex rounded-lg bg-slate-900 border border-slate-800 p-0.5">
           {(["kanban", "list", "timeline"] as const).map((v) => (
-            <button key={v} onClick={() => setTaskBoardView(v)} className={"px-3 py-1.5 rounded-md text-xs font-medium transition-colors " + (taskBoardView === v ? "bg-accent-700 text-white" : "text-theme-muted hover:text-theme")}>
-              {v === "kanban" ? "kanban" : v === "list" ? "רשימה" : "ציר זמן"}
+            <button key={v} onClick={() => setTaskBoardView(v)}
+              className={"px-3 py-1.5 rounded-md text-xs font-medium transition-colors " +
+                (taskBoardView === v ? "bg-accent-700 text-white" : "text-theme-muted hover:text-theme")}>
+              {v === "kanban" ? "Kanban" : v === "list" ? "רשימה" : "ציר זמן"}
             </button>
           ))}
         </div>
       </div>
-
       {taskBoardView === "kanban" && <KanbanView />}
       {taskBoardView === "list" && <ListView />}
       {taskBoardView === "timeline" && <TimelineView />}
       {showModal && <AddTaskModal onClose={() => setShowModal(false)} onAdd={(task) => createTask.mutate(task)} members={members as Array<{ id: string; display_name: string }>} />}
       {editingTask && <EditTaskModal task={editingTask} onClose={() => setEditingTask(null)} onSave={(t) => updateTask.mutate(t)} members={members as Array<{ id: string; display_name: string }>} />}
-
       {pendingDelete && (
         <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4">
           <div className="w-full max-w-md rounded-2xl border border-slate-700 bg-slate-900 p-5">
@@ -410,18 +533,9 @@ export default function Tasks() {
             </div>
             <p className="text-sm text-theme-muted mt-1">הפעולה אינה ניתנת לביטול.</p>
             <div className="flex justify-end gap-2 mt-4">
-              <button onClick={() => setPendingDelete(null)} className="px-3 py-2 rounded-lg text-sm bg-slate-800 text-theme-muted hover:bg-slate-700">
-                ביטול
-              </button>
-              <button
-                onClick={() => {
-                  deleteTask.mutate(pendingDelete);
-                  setPendingDelete(null);
-                }}
-                className="px-3 py-2 rounded-lg text-sm bg-red-600 text-white hover:bg-red-500"
-              >
-                מחיקה
-              </button>
+              <button onClick={() => setPendingDelete(null)} className="px-3 py-2 rounded-lg text-sm bg-slate-800 text-theme-muted hover:bg-slate-700">ביטול</button>
+              <button onClick={() => { deleteTask.mutate(pendingDelete); setPendingDelete(null); }}
+                className="px-3 py-2 rounded-lg text-sm bg-red-600 text-white hover:bg-red-500">מחיקה</button>
             </div>
           </div>
         </div>

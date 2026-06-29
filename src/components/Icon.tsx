@@ -1,49 +1,21 @@
 type IconName =
-  | "home"
-  | "tasks"
-  | "inventory"
-  | "babies"
-  | "finance"
-  | "settings"
-  | "logout"
-  | "calendar"
-  | "warning"
-  | "user"
-  | "clock"
-  | "package"
-  | "wallet"
-  | "medical"
-  | "alert"
-  | "link"
-  | "bottle"
-  | "baby"
-  | "moon"
-  | "clipboard"
-  | "check"
-  | "x"
-  | "plus"
-  | "trash"
-  | "edit"
-  | "search"
-  | "copy"
-  | "chevron-left"
-  | "chevron-right"
-  | "filter"
-  | "drag"
-  | "star"
-  | "palette"
-  | "send"
-  | "diaper"
-  | "pill"
-  | "chart"
-  | "hand-wave";
+  | "home" | "tasks" | "inventory" | "babies" | "finance" | "settings" | "logout"
+  | "calendar" | "warning" | "user" | "clock" | "package" | "wallet" | "medical"
+  | "alert" | "link" | "bottle" | "baby" | "moon" | "clipboard" | "check" | "x"
+  | "plus" | "trash" | "edit" | "search" | "copy" | "chevron-left" | "chevron-right"
+  | "filter" | "drag" | "star" | "palette" | "send" | "diaper" | "pill" | "chart"
+  | "hand-wave" | "upload" | "bar-chart" | "repeat" | "users" | "trending-up"
+  | "pie-chart" | "refresh" | "tag" | "chevron-down" | "chevron-up" | "credit-card"
+  | "download" | "layers" | "minus" | "external-link" | "eye" | "grid";
 
 export default function Icon({
   name,
   className = "w-4 h-4",
+  title,
 }: {
   name: IconName;
   className?: string;
+  title?: string;
 }) {
   const common = {
     fill: "none",
@@ -51,6 +23,7 @@ export default function Icon({
     strokeWidth: 1.8,
     strokeLinecap: "round" as const,
     strokeLinejoin: "round" as const,
+    ...(title ? { "aria-label": title } : { "aria-hidden": true }),
   };
 
   switch (name) {
@@ -395,11 +368,41 @@ export default function Icon({
         </svg>
       );
 
+    case "upload":
+      return (<svg viewBox="0 0 24 24" className={className} aria-hidden="true" {...common}><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>);
+    case "download":
+      return (<svg viewBox="0 0 24 24" className={className} aria-hidden="true" {...common}><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>);
+    case "bar-chart":
+      return (<svg viewBox="0 0 24 24" className={className} aria-hidden="true" {...common}><rect x="3" y="9" width="4" height="12"/><rect x="9" y="5" width="4" height="16"/><rect x="15" y="2" width="4" height="19"/></svg>);
+    case "repeat":
+      return (<svg viewBox="0 0 24 24" className={className} aria-hidden="true" {...common}><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg>);
+    case "users":
+      return (<svg viewBox="0 0 24 24" className={className} aria-hidden="true" {...common}><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>);
+    case "trending-up":
+      return (<svg viewBox="0 0 24 24" className={className} aria-hidden="true" {...common}><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg>);
+    case "pie-chart":
+      return (<svg viewBox="0 0 24 24" className={className} aria-hidden="true" {...common}><path d="M21.21 15.89A10 10 0 1 1 8 2.83"/><path d="M22 12A10 10 0 0 0 12 2v10z"/></svg>);
+    case "refresh":
+      return (<svg viewBox="0 0 24 24" className={className} aria-hidden="true" {...common}><polyline points="23 4 23 10 17 10"/><path d="M20.5 15a9 9 0 1 1-2.6-5.4L23 4"/></svg>);
+    case "tag":
+      return (<svg viewBox="0 0 24 24" className={className} aria-hidden="true" {...common}><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/></svg>);
+    case "chevron-down":
+      return (<svg viewBox="0 0 24 24" className={className} aria-hidden="true" {...common}><path d="M6 9l6 6 6-6"/></svg>);
+    case "chevron-up":
+      return (<svg viewBox="0 0 24 24" className={className} aria-hidden="true" {...common}><path d="M18 15l-6-6-6 6"/></svg>);
+    case "credit-card":
+      return (<svg viewBox="0 0 24 24" className={className} aria-hidden="true" {...common}><rect x="1" y="4" width="22" height="16" rx="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>);
+    case "layers":
+      return (<svg viewBox="0 0 24 24" className={className} aria-hidden="true" {...common}><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></svg>);
+    case "minus":
+      return (<svg viewBox="0 0 24 24" className={className} aria-hidden="true" {...common}><line x1="5" y1="12" x2="19" y2="12"/></svg>);
+    case "external-link":
+      return (<svg viewBox="0 0 24 24" className={className} aria-hidden="true" {...common}><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>);
+    case "eye":
+      return (<svg viewBox="0 0 24 24" className={className} aria-hidden="true" {...common}><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>);
+    case "grid":
+      return (<svg viewBox="0 0 24 24" className={className} aria-hidden="true" {...common}><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>);
     default:
-      return (
-        <svg viewBox="0 0 24 24" className={className} aria-hidden="true" {...common}>
-          <circle cx="12" cy="12" r="8" />
-        </svg>
-      );
+      return (<svg viewBox="0 0 24 24" className={className} aria-hidden="true" {...common}><circle cx="12" cy="12" r="8"/></svg>);
   }
 }

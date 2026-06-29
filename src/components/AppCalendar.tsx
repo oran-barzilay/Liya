@@ -1,0 +1,153 @@
+import { useState, useRef, useEffect } from "react";
+import Icon from "./Icon";
+const MONTH_NAMES = ["ינואר","פברואר","מרץ","אפריל","מאי","יוני","יולי","אוגוסט","ספטמבר","אוקטובר","נובמבר","דצמבר"];
+const DAY_NAMES = ["א","ב","ג","ד","ה","ו","ש"];
+interface AppCalendarProps {
+  value: string;
+  onChange: (val: string) => void;
+  mode?: "date" | "datetime";
+  placeholder?: string;
+  label?: string;
+  className?: string;
+  inline?: boolean;
+}
+export default function AppCalendar({
+  value, onChange, mode = "date", placeholder, label, className, inline = false
+}: AppCalendarProps) {
+  const [open, setOpen] = useState(inline);
+  const ref = useRef<HTMLDivElement>(null);
+  const selectedDate = value ? value.slice(0, 10) : "";
+  const [view, setView] = useState(() => {
+    const d = selectedDate ? new Date(selectedDate + "T12:00:00") : new Date();
+    return { year: d.getFullYear(), month: d.getMonth() };
+  });
+  const [time, setTime] = useState(
+    value && value.includes("T") ? value.slice(11, 16) : "09:00"
+  );
+  const today = new Date().toISOString().slice(0, 10);
+  useEffect(() => {
+    if (inline) return;
+    const handle = (e: MouseEvent) => {
+      if (ref.current && ref.current.contains(e.target as Node) === false) setOpen(false);
+    };
+    document.addEventListener("mousedown", handle);
+    return () => document.removeEventListener("mousedown", handle);
+  }, [inline]);
+  useEffect(() => {
+    if (value && value.includes("T")) setTime(value.slice(11, 16));
+  }, [value]);
+  const prevMonth = () => setView(v =>
+    v.month === 0 ? { year: v.year - 1, month: 11 } : { ...v, month: v.month - 1 }
+  );
+  const nextMonth = () => setView(v =>
+    v.month === 11 ? { year: v.year + 1, month: 0 } : { ...v, month: v.month + 1 }
+  );
+  const selectDay = (day: number) => {
+    const m = String(view.month + 1).padStart(2, "0");
+    const d = String(day).padStart(2, "0");
+    const ds = view.year + "-" + m + "-" + d;
+    if (mode === "datetime") {
+      onChange(ds + "T" + time);
+    } else {
+      onChange(ds);
+      if (inline === false) setOpen(false);
+    }
+  };
+  const handleTimeChange = (newTime: string) => {
+    setTime(newTime);
+    if (selectedDate) onChange(selectedDate + "T" + newTime);
+  };
+  const firstDow = new Date(view.year, view.month, 1).getDay();
+  const lastDate = new Date(view.year, view.month + 1, 0).getDate();
+  const days: (number | null)[] = [];
+  for (let i = 0; i < firstDow; i++) days.push(null);
+  for (let d = 1; d <= lastDate; d++) days.push(d);
+  const displayValue = selectedDate
+    ? (mode === "datetime" && value.includes("T")
+        ? new Date(value).toLocaleString("he-IL", {
+            year: "numeric", month: "2-digit", day: "2-digit",
+            hour: "2-digit", minute: "2-digit",
+          })
+        : new Date(selectedDate + "T12:00:00").toLocaleDateString("he-IL", {
+            year: "numeric", month: "2-digit", day: "2-digit",
+          }))
+    : "";
+  const Panel = () => (
+    <div className="bg-slate-900 border border-slate-700 rounded-xl shadow-2xl p-3 w-64" dir="rtl">
+      <div className="flex items-center justify-between mb-2">
+        <button type="button" onClick={prevMonth}
+          className="text-theme-muted hover:text-theme p-1 rounded hover:bg-slate-800">
+          <Icon name="chevron-right" className="w-4 h-4" />
+        </button>
+        <span className="text-sm font-semibold text-theme">
+          {MONTH_NAMES[view.month]} {view.year}
+        </span>
+        <button type="button" onClick={nextMonth}
+          className="text-theme-muted hover:text-theme p-1 rounded hover:bg-slate-800">
+          <Icon name="chevron-left" className="w-4 h-4" />
+        </button>
+      </div>
+      <div className="grid grid-cols-7 mb-1">
+        {DAY_NAMES.map(d => (
+          <div key={d} className="text-center text-xs text-theme-muted py-1 font-medium">{d}</div>
+        ))}
+      </div>
+      <div className="grid grid-cols-7 gap-0.5">
+        {days.map((day, i) => {
+          if (day === null) return <div key={i} />;
+          const mm = String(view.month + 1).padStart(2, "0");
+          const dd = String(day).padStart(2, "0");
+          const iso = view.year + "-" + mm + "-" + dd;
+          const isSel = iso === selectedDate;
+          const isTod = iso === today;
+          return (
+            <button key={i} type="button" onClick={() => selectDay(day)}
+              className={
+                "text-xs py-1.5 rounded-lg transition-colors text-center " +
+                (isSel
+                  ? "bg-accent-600 text-white font-medium"
+                  : isTod
+                  ? "border border-accent-500 text-accent-400"
+                  : "text-theme hover:bg-slate-800")
+              }>
+              {day}
+            </button>
+          );
+        })}
+      </div>
+      {mode === "datetime" && (
+        <div className="mt-3 pt-3 border-t border-slate-700">
+          <label className="text-xs text-theme-muted block mb-1">שעה</label>
+          <input type="time" value={time}
+            onChange={e => handleTimeChange(e.target.value)}
+            className="input-base w-full text-sm py-1.5" />
+        </div>
+      )}
+    </div>
+  );
+  if (inline) {
+    return (
+      <div className={className}>
+        {label && <label className="text-xs text-theme-muted block mb-1">{label}</label>}
+        <Panel />
+      </div>
+    );
+  }
+  return (
+    <div ref={ref} className={"relative " + (className ?? "")}>
+      {label && <label className="text-xs text-theme-muted block mb-1">{label}</label>}
+      <button type="button" onClick={() => setOpen(prev => !prev)}
+        className="input-base w-full flex items-center justify-between gap-2 text-sm">
+        <span className={displayValue ? "text-theme" : "text-slate-500"}>
+          {displayValue || placeholder || "בחר תאריך"}
+        </span>
+        <Icon name="calendar" className="w-4 h-4 text-theme-muted shrink-0" />
+      </button>
+      {open && (
+        <div className="absolute top-full mt-1.5 z-50 left-0">
+          <Panel />
+        </div>
+      )}
+    </div>
+  );
+}

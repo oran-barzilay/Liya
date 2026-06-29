@@ -2,9 +2,16 @@ import { useState } from "react";
 import { useTasks } from "../hooks/useTasks";
 import { useInventory } from "../hooks/useInventory";
 import { useTransactions } from "../hooks/useFinance";
-import { useAppointments } from "../hooks/useBaby";
+import { useAppointments, useBabyLogs, useChildren } from "../hooks/useBaby";
 import { useProfile } from "../hooks/useProfile";
 import Icon from "../components/Icon";
+
+function formatMinutes(mins: number) {
+  if (mins < 60) return `${mins} דק'`;
+  const h = Math.floor(mins / 60);
+  const m = mins % 60;
+  return m > 0 ? `${h} שע' ${m} דק'` : `${h} שעה`;
+}
 
 function StatCard({ icon, label, value, sub, color = "accent" }: {
   icon: React.ReactNode; label: string; value: string | number; sub?: string; color?: "accent" | "emerald" | "amber" | "red";
@@ -31,6 +38,8 @@ export default function Dashboard() {
   const { data: inventory = [] } = useInventory();
   const { data: appointments = [] } = useAppointments();
   const { totals } = useTransactions();
+  const { data: children = [] } = useChildren();
+  const { data: allBabyLogs = [] } = useBabyLogs();          // all children, no filter
   const [copied, setCopied] = useState(false);
   const today = new Date().toISOString().slice(0, 10);
   const hour = new Date().getHours();
@@ -40,6 +49,14 @@ export default function Dashboard() {
   const lowStock = inventory.filter(item => Number(item.quantity) < Number(item.critical_threshold));
   const nextAppt = appointments[0];
   const balance = totals.income - totals.expenses;
+
+  // Baby daily summary
+  const todayBabyLogs = allBabyLogs.filter(l => l.event_at?.slice(0, 10) === today);
+  const todayTummyMinutes = todayBabyLogs.filter(l => l.log_type === "tummy_time").reduce((s, l) => s + (l.amount ?? 0), 0);
+  const todayFeedings = todayBabyLogs.filter(l => l.log_type === "feeding");
+  const todayFeedingMl = todayFeedings.reduce((s, l) => s + (l.amount ?? 0), 0);
+  const todayDiapers = todayBabyLogs.filter(l => l.log_type === "diaper_change").length;
+  const hasBabyActivity = children.length > 0 && todayBabyLogs.length > 0;
 
   const copyHouseholdId = () => {
     if (!profile?.household_id) return;
@@ -71,6 +88,35 @@ export default function Dashboard() {
           value={nextAppt ? new Date(nextAppt.starts_at).toLocaleDateString("he-IL", { month: "short", day: "numeric" }) : "אין"}
           sub={nextAppt?.title ?? "אין אירועים קרובים"} color="amber" />
       </div>
+
+      {/* ─── Baby daily summary ─── */}
+      {hasBabyActivity && (
+        <section className="mb-6">
+          <h3 className="text-base font-semibold mb-3 text-theme flex items-center gap-2">
+            <Icon name="baby" className="w-4 h-4 text-pink-400" /> סיכום תינוקות היום
+          </h3>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            {todayTummyMinutes > 0 && (
+              <div className="bg-pink-950/30 border border-pink-800 rounded-xl px-4 py-3 text-center">
+                <div className="text-xl font-bold text-pink-300">{formatMinutes(todayTummyMinutes)}</div>
+                <div className="text-xs text-pink-400 mt-0.5">זמן בטן</div>
+              </div>
+            )}
+            {todayFeedings.length > 0 && (
+              <div className="bg-accent-950/30 border border-accent-800 rounded-xl px-4 py-3 text-center">
+                <div className="text-xl font-bold text-accent-300">{todayFeedings.length}</div>
+                <div className="text-xs text-accent-400 mt-0.5">האכלות · {todayFeedingMl} מ״ל</div>
+              </div>
+            )}
+            {todayDiapers > 0 && (
+              <div className="bg-amber-950/30 border border-amber-800 rounded-xl px-4 py-3 text-center">
+                <div className="text-xl font-bold text-amber-300">{todayDiapers}</div>
+                <div className="text-xs text-amber-400 mt-0.5">החלפות חיתול</div>
+              </div>
+            )}
+          </div>
+        </section>
+      )}
 
       {todayTimeSensitive.length > 0 && (
         <section className="mb-6">

@@ -4,6 +4,14 @@ import Icon from "../components/Icon";
 
 type Row = Record<string, any>;
 
+// ── Shared helper ────────────────────────────────────────────────
+function formatMinutes(mins: number) {
+  if (mins < 60) return `${mins} דק'`;
+  const h = Math.floor(mins / 60);
+  const m = mins % 60;
+  return m > 0 ? `${h} שע' ${m} דק'` : `${h} שעה`;
+}
+
 const LOG_LABELS: Record<string, string> = {
   feeding: "האכלה",
   diaper_change: "החלפת חיתול",
@@ -11,6 +19,7 @@ const LOG_LABELS: Record<string, string> = {
   bio_gaia: "ביו גאיה",
   vitamin_d: "ויטמין D",
   leczchik: "ליקצ׳יק",
+  tummy_time: "זמן בטן",
   note: "הערה",
 };
 
@@ -25,6 +34,7 @@ function LogIcon({ type }: { type: string }) {
     case "feeding": return <Icon name="bottle" className="w-5 h-5 text-accent-400" />;
     case "diaper_change": return <Icon name="diaper" className="w-5 h-5 text-amber-400" />;
     case "sleep": return <Icon name="moon" className="w-5 h-5 text-indigo-400" />;
+    case "tummy_time": return <Icon name="baby" className="w-5 h-5 text-pink-400" />;
     case "bio_gaia": case "vitamin_d": case "leczchik": return <Icon name="pill" className="w-5 h-5 text-emerald-400" />;
     default: return <Icon name="clipboard" className="w-5 h-5 text-slate-400" />;
   }
@@ -40,6 +50,7 @@ function AddLogModal({ logType, lastAmount, onClose, onSave }: {
   const now = new Date();
   const [eventAt, setEventAt] = useState(now.toISOString().slice(0, 16));
   const [amount, setAmount] = useState(lastAmount ?? 120);
+  const [tummyMinutes, setTummyMinutes] = useState(10);
   const [diaperTypes, setDiaperTypes] = useState<string[]>(["pee"]);
   const [sleepStart, setSleepStart] = useState(now.toISOString().slice(0, 16));
   const [notes, setNotes] = useState("");
@@ -58,6 +69,8 @@ function AddLogModal({ logType, lastAmount, onClose, onSave }: {
       onSave({ ...base, log_type: "diaper_change", notes: diaperTypes.join(", ") + (notes ? ` | ${notes}` : "") });
     } else if (logType === "sleep") {
       onSave({ ...base, log_type: "sleep", event_at: new Date(sleepStart).toISOString(), notes: notes || "התחלת שינה" });
+    } else if (logType === "tummy_time") {
+      onSave({ ...base, log_type: "tummy_time", amount: tummyMinutes, unit: "דקות" });
     } else {
       onSave({ ...base, log_type: logType });
     }
@@ -104,6 +117,26 @@ function AddLogModal({ logType, lastAmount, onClose, onSave }: {
           </div>
         )}
 
+        {/* Tummy time duration */}
+        {logType === "tummy_time" && (
+          <div>
+            <label className="text-xs text-theme-muted block mb-1">משך (דקות)</label>
+            <div className="flex items-center gap-2">
+              <button type="button" onClick={() => setTummyMinutes(m => Math.max(1, m - 5))}
+                className="w-10 h-10 rounded-lg bg-slate-800 border border-slate-700 flex items-center justify-center text-theme-muted hover:text-theme hover:bg-slate-700">
+                <Icon name="chevron-right" className="w-4 h-4" />
+              </button>
+              <input type="number" min="1" step="1" value={tummyMinutes} onChange={e => setTummyMinutes(Number(e.target.value))}
+                className="input-base w-full text-center text-lg font-bold" />
+              <button type="button" onClick={() => setTummyMinutes(m => m + 5)}
+                className="w-10 h-10 rounded-lg bg-slate-800 border border-slate-700 flex items-center justify-center text-theme-muted hover:text-theme hover:bg-slate-700">
+                <Icon name="chevron-left" className="w-4 h-4" />
+              </button>
+            </div>
+            <p className="text-xs text-theme-muted mt-1.5 text-center">{formatMinutes(tummyMinutes)}</p>
+          </div>
+        )}
+
         {/* Diaper types */}
         {logType === "diaper_change" && (
           <div>
@@ -140,10 +173,15 @@ function EditLogModal({ log, onClose, onSave }: { log: Row; onClose: () => void;
   const [eventAt, setEventAt] = useState(log.event_at?.slice(0, 16) ?? "");
   const [amount, setAmount] = useState(log.amount ?? 0);
   const [notes, setNotes] = useState(log.notes ?? "");
+  const isTummy = log.log_type === "tummy_time";
 
   return (
     <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
-      <form onSubmit={e => { e.preventDefault(); onSave({ id: log.id, event_at: new Date(eventAt).toISOString(), amount: log.log_type === "feeding" ? amount : log.amount, notes: notes || null }); onClose(); }}
+      <form onSubmit={e => {
+        e.preventDefault();
+        onSave({ id: log.id, event_at: new Date(eventAt).toISOString(), amount: (log.log_type === "feeding" || isTummy) ? amount : log.amount, notes: notes || null });
+        onClose();
+      }}
         className="bg-slate-900 border border-slate-700 rounded-2xl p-5 w-full max-w-sm space-y-4">
         <div className="flex items-center justify-between">
           <h3 className="font-semibold text-theme">עריכת {LOG_LABELS[log.log_type] ?? log.log_type}</h3>
@@ -168,6 +206,24 @@ function EditLogModal({ log, onClose, onSave }: { log: Row; onClose: () => void;
                 <Icon name="chevron-left" className="w-4 h-4" />
               </button>
             </div>
+          </div>
+        )}
+        {isTummy && (
+          <div>
+            <label className="text-xs text-theme-muted block mb-1">משך (דקות)</label>
+            <div className="flex items-center gap-2">
+              <button type="button" onClick={() => setAmount((a: number) => Math.max(1, a - 5))}
+                className="w-10 h-10 rounded-lg bg-slate-800 border border-slate-700 flex items-center justify-center text-theme-muted hover:text-theme">
+                <Icon name="chevron-right" className="w-4 h-4" />
+              </button>
+              <input type="number" min="1" step="1" value={amount} onChange={e => setAmount(Number(e.target.value))}
+                className="input-base w-full text-center text-lg font-bold" />
+              <button type="button" onClick={() => setAmount((a: number) => a + 5)}
+                className="w-10 h-10 rounded-lg bg-slate-800 border border-slate-700 flex items-center justify-center text-theme-muted hover:text-theme">
+                <Icon name="chevron-left" className="w-4 h-4" />
+              </button>
+            </div>
+            <p className="text-xs text-theme-muted mt-1.5 text-center">{formatMinutes(amount)}</p>
           </div>
         )}
         <div>
@@ -216,7 +272,7 @@ function AddEventModal({ children, onClose, onSave }: { children: Row[]; onClose
 /* ─── Simple Daily Charts ─── */
 function DailyCharts({ logs, days = 7 }: { logs: Row[]; days?: number }) {
   const chartData = useMemo(() => {
-    const result: { date: string; feedings: number; ml: number; diapers: number; sleeps: number }[] = [];
+    const result: { date: string; feedings: number; ml: number; diapers: number; sleeps: number; tummyTime: number }[] = [];
     for (let i = days - 1; i >= 0; i--) {
       const d = new Date();
       d.setDate(d.getDate() - i);
@@ -228,12 +284,14 @@ function DailyCharts({ logs, days = 7 }: { logs: Row[]; days?: number }) {
         ml: dayLogs.filter(l => l.log_type === "feeding").reduce((s, l) => s + (l.amount ?? 0), 0),
         diapers: dayLogs.filter(l => l.log_type === "diaper_change").length,
         sleeps: dayLogs.filter(l => l.log_type === "sleep").length,
+        tummyTime: dayLogs.filter(l => l.log_type === "tummy_time").reduce((s, l) => s + (l.amount ?? 0), 0),
       });
     }
     return result;
   }, [logs, days]);
 
   const maxMl = Math.max(...chartData.map(d => d.ml), 1);
+  const maxTummy = Math.max(...chartData.map(d => d.tummyTime), 1);
 
   return (
     <div className="space-y-4">
@@ -255,8 +313,26 @@ function DailyCharts({ logs, days = 7 }: { logs: Row[]; days?: number }) {
         </div>
       </div>
 
+      {/* Tummy time chart */}
+      <div>
+        <h4 className="text-xs font-semibold text-theme-muted mb-2 flex items-center gap-1.5">
+          <Icon name="baby" className="w-3.5 h-3.5 text-pink-400" /> זמן בטן יומי (דקות)
+        </h4>
+        <div className="flex items-end gap-1 h-20">
+          {chartData.map((d, i) => (
+            <div key={i} className="flex-1 flex flex-col items-center gap-1">
+              <div className="w-full bg-slate-800 rounded-t-sm relative overflow-hidden" style={{ height: "100%" }}>
+                <div className="absolute bottom-0 w-full bg-pink-600 rounded-t-sm transition-all" style={{ height: `${(d.tummyTime / maxTummy) * 100}%` }} />
+              </div>
+              <span className="text-[9px] text-theme-muted">{new Date(d.date).toLocaleDateString("he-IL", { day: "numeric", month: "numeric" })}</span>
+              <span className="text-[9px] text-pink-400 font-medium">{d.tummyTime > 0 ? d.tummyTime : "—"}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+
       {/* Counts chart */}
-      <div className="grid grid-cols-3 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         <div className="bg-slate-900 border border-slate-800 rounded-xl p-3 text-center">
           <div className="text-lg font-bold text-theme">{chartData[chartData.length - 1]?.feedings ?? 0}</div>
           <div className="text-[10px] text-theme-muted">האכלות היום</div>
@@ -268,6 +344,12 @@ function DailyCharts({ logs, days = 7 }: { logs: Row[]; days?: number }) {
         <div className="bg-slate-900 border border-slate-800 rounded-xl p-3 text-center">
           <div className="text-lg font-bold text-theme">{chartData[chartData.length - 1]?.ml ?? 0}</div>
           <div className="text-[10px] text-theme-muted">מ״ל היום</div>
+        </div>
+        <div className="bg-slate-900 border border-slate-800 rounded-xl p-3 text-center">
+          <div className="text-lg font-bold text-pink-400">
+            {chartData[chartData.length - 1]?.tummyTime ? formatMinutes(chartData[chartData.length - 1].tummyTime) : "—"}
+          </div>
+          <div className="text-[10px] text-theme-muted">זמן בטן היום</div>
         </div>
       </div>
     </div>
@@ -291,6 +373,8 @@ export default function Baby() {
   const dateLogs = logs.filter(l => l.event_at?.slice(0, 10) === selectedDate);
   const feedings = dateLogs.filter(l => l.log_type === "feeding");
   const totalMl = feedings.reduce((s, f) => s + (f.amount ?? 0), 0);
+  const tummyTimeLogs = dateLogs.filter(l => l.log_type === "tummy_time");
+  const totalTummyMinutes = tummyTimeLogs.reduce((s, l) => s + (l.amount ?? 0), 0);
 
   const navigateDate = (delta: number) => {
     const d = new Date(selectedDate + "T12:00:00");
@@ -300,20 +384,19 @@ export default function Baby() {
 
   const isToday = selectedDate === new Date().toISOString().slice(0, 10);
 
-  // Get last feeding amount for default
   const lastFeedingAmount = useMemo(() => {
     const lastFeeding = logs.find(l => l.log_type === "feeding" && l.amount);
     return lastFeeding?.amount ?? 120;
   }, [logs]);
 
-  // Available log types (built-in + can extend)
   const logTypes = [
-    { id: "feeding", label: "האכלה", icon: "bottle" as const, color: "text-accent-400" },
-    { id: "diaper_change", label: "חיתול", icon: "diaper" as const, color: "text-amber-400" },
-    { id: "sleep", label: "שינה", icon: "moon" as const, color: "text-indigo-400" },
-    { id: "bio_gaia", label: "ביו גאיה", icon: "pill" as const, color: "text-emerald-400" },
-    { id: "vitamin_d", label: "ויטמין D", icon: "pill" as const, color: "text-yellow-400" },
-    { id: "leczchik", label: "ליקצ׳יק", icon: "pill" as const, color: "text-teal-400" },
+    { id: "feeding",      label: "האכלה",    icon: "bottle"    as const, color: "text-accent-400" },
+    { id: "diaper_change",label: "חיתול",    icon: "diaper"    as const, color: "text-amber-400"  },
+    { id: "sleep",        label: "שינה",     icon: "moon"      as const, color: "text-indigo-400" },
+    { id: "tummy_time",   label: "זמן בטן",  icon: "baby"      as const, color: "text-pink-400"   },
+    { id: "bio_gaia",     label: "ביו גאיה", icon: "pill"      as const, color: "text-emerald-400"},
+    { id: "vitamin_d",    label: "ויטמין D", icon: "pill"      as const, color: "text-yellow-400" },
+    { id: "leczchik",     label: "ליקצ׳יק",  icon: "pill"      as const, color: "text-teal-400"   },
   ];
 
   return (
@@ -400,7 +483,7 @@ export default function Baby() {
           {tab === "logs" && (
             <div>
               {/* Summary cards */}
-              <div className="grid grid-cols-3 gap-3 mb-6">
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
                 <div className="bg-slate-900 border border-slate-800 rounded-xl p-4 text-center">
                   <div className="text-2xl font-bold text-theme">{feedings.length}</div>
                   <div className="text-xs text-theme-muted mt-1">האכלות</div>
@@ -409,6 +492,12 @@ export default function Baby() {
                 <div className="bg-slate-900 border border-slate-800 rounded-xl p-4 text-center">
                   <div className="text-2xl font-bold text-theme">{dateLogs.filter(l => l.log_type === "diaper_change").length}</div>
                   <div className="text-xs text-theme-muted mt-1">חיתולים</div>
+                </div>
+                <div className="bg-slate-900 border border-slate-800 rounded-xl p-4 text-center col-span-2 sm:col-span-1">
+                  <div className={`text-2xl font-bold ${totalTummyMinutes > 0 ? "text-pink-400" : "text-theme"}`}>
+                    {totalTummyMinutes > 0 ? formatMinutes(totalTummyMinutes) : "—"}
+                  </div>
+                  <div className="text-xs text-theme-muted mt-1">זמן בטן</div>
                 </div>
                 <div className="bg-slate-900 border border-slate-800 rounded-xl p-4 text-center">
                   <div className="text-2xl font-bold text-theme">{dateLogs.length}</div>
@@ -433,7 +522,11 @@ export default function Baby() {
                     <LogIcon type={log.log_type} />
                     <div className="flex-1 min-w-0">
                       <div className="text-sm font-medium text-theme">{LOG_LABELS[log.log_type] ?? log.log_type}</div>
-                      {log.amount != null && <div className="text-xs text-theme-muted">{log.amount} {log.unit ?? "מ״ל"}</div>}
+                      {log.amount != null && (
+                        <div className="text-xs text-theme-muted">
+                          {log.log_type === "tummy_time" ? formatMinutes(log.amount) : `${log.amount} ${log.unit ?? "מ״ל"}`}
+                        </div>
+                      )}
                       {log.notes && <div className="text-xs text-theme-muted opacity-70">{log.notes}</div>}
                     </div>
                     <span className="text-xs text-theme-muted">{new Date(log.event_at).toLocaleTimeString("he-IL", { hour: "2-digit", minute: "2-digit" })}</span>

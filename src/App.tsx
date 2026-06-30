@@ -23,9 +23,11 @@ function hexToRgb(hex: string) {
 }
 
 function AppRoutes() {
-  const { user, loading: authLoading } = useAuth();
+  const { user, loading: authLoading, isRecovery } = useAuth();
   const { data: profile, isLoading: profileLoading } = useProfile();
   const { accentColor, accentCustom, appBg, menuBg, textPrimary, textMuted } = useThemeStore();
+
+  // ...existing code... (useEffect for CSS vars)
 
   useEffect(() => {
     const root = document.documentElement;
@@ -56,6 +58,10 @@ function AppRoutes() {
       </div>
     );
   }
+
+  // Password recovery flow — user is temporarily signed in with a recovery token.
+  // Show the reset form immediately instead of the normal app.
+  if (user && isRecovery) return <ResetPassword />;
 
   if (!user) return <Login />;
   if (!profile) return <Setup />;

@@ -21,8 +21,12 @@ export default function Login() {
     if (mode === "reset") {
       setLoading(true);
       try {
+        // Use explicit VITE_SITE_URL so the link in the email always points to the
+        // deployed domain, not localhost.  Set this var in Vercel → Settings → Env vars.
+        const siteUrl = import.meta.env.VITE_SITE_URL as string | undefined;
+        const redirectBase = siteUrl?.trim() || window.location.origin;
         const { error: resetErr } = await supabase.auth.resetPasswordForEmail(email, {
-          redirectTo: `${window.location.origin}/`,
+          redirectTo: `${redirectBase}/`,
         });
         if (resetErr) throw resetErr;
         setInfo("קישור לאיפוס סיסמה נשלח למייל שלך.");

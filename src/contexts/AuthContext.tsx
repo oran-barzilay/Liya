@@ -6,6 +6,8 @@ interface AuthContextValue {
   session: Session | null;
   user: User | null;
   loading: boolean;
+  isRecovery: boolean;
+  clearRecovery: () => void;
   signIn: (email: string, password: string) => Promise<void>;
   signOut: () => Promise<void>;
 }
@@ -15,6 +17,7 @@ const AuthContext = createContext<AuthContextValue | null>(null);
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
+  const [isRecovery, setIsRecovery] = useState(false);
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => {
@@ -23,8 +26,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     });
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, s) => {
+    } = supabase.auth.onAuthStateChange((event, s) => {
       setSession(s);
+      if (event === "PASSWORD_RECOVERY") {
+        setIsRecovery(true);
+      }
     });
     return () => subscription.unsubscribe();
   }, []);
@@ -38,9 +44,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     await supabase.auth.signOut();
   };
 
+  const clearRecovery = () => setIsRecovery(false);
+
   return (
     <AuthContext.Provider
-      value={{ session, user: session?.user ?? null, loading, signIn, signOut }}
+      value={{ session, user: session?.user ?? null, loading, isRecovery, clearRecovery, signIn, signOut }}
     >
       {children}
     </AuthContext.Provider>

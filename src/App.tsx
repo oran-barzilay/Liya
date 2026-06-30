@@ -12,6 +12,7 @@ import Inventory from "./pages/Inventory";
 import Baby from "./pages/Baby";
 import Finance from "./pages/Finance";
 import Settings from "./pages/Settings";
+import ResetPassword from "./pages/ResetPassword";
 
 function hexToRgb(hex: string) {
   const cleaned = hex.replace("#", "");

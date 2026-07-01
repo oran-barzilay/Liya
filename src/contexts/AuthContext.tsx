@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useState } from "react";
+import React, { createContext, useContext, useEffect, useState, useCallback } from "react";
 import type { Session, User } from "@supabase/supabase-js";
 import { supabase } from "../lib/supabase";
 
@@ -20,31 +20,53 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [isRecovery, setIsRecovery] = useState(false);
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data }) => {
-      setSession(data.session);
-      setLoading(false);
-    });
+    // onAuthStateChange is the single source of truth.
+    // INITIAL_SESSION fires immediately (synchronously in @supabase/supabase-js v2.x)
+    // with the persisted session from localStorage.
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((event, s) => {
-      setSession(s);
-      if (event === "PASSWORD_RECOVERY") {
+      if (event === "INITIAL_SESSION") {
+        setSession(s);
+        setLoading(false);
+      } else if (
+        event === "SIGNED_IN" ||
+        event === "TOKEN_REFRESHED" ||
+        event === "USER_UPDATED"
+      ) {
+        setSession(s);
+      } else if (event === "SIGNED_OUT") {
+        setSession(null);
+        setIsRecovery(false);
+      } else if (event === "PASSWORD_RECOVERY") {
+        setSession(s);
         setIsRecovery(true);
       }
     });
-    return () => subscription.unsubscribe();
+
+    // Safety fallback: if INITIAL_SESSION never fires (older SDK), load via getSession
+    const fallback = setTimeout(async () => {
+      const { data } = await supabase.auth.getSession();
+      setSession((prev) => (prev !== undefined ? prev : data.session));
+      setLoading(false);
+    }, 600);
+
+    return () => {
+      subscription.unsubscribe();
+      clearTimeout(fallback);
+    };
   }, []);
 
-  const signIn = async (email: string, password: string) => {
+  const signIn = useCallback(async (email: string, password: string) => {
     const { error } = await supabase.auth.signInWithPassword({ email, password });
     if (error) throw error;
-  };
+  }, []);
 
-  const signOut = async () => {
+  const signOut = useCallback(async () => {
     await supabase.auth.signOut();
-  };
+  }, []);
 
-  const clearRecovery = () => setIsRecovery(false);
+  const clearRecovery = useCallback(() => setIsRecovery(false), []);
 
   return (
     <AuthContext.Provider
@@ -60,4 +82,3 @@ export function useAuth() {
   if (!ctx) throw new Error("useAuth must be used inside AuthProvider");
   return ctx;
 }
-

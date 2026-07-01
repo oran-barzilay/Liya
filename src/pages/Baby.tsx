@@ -1,15 +1,23 @@
 import { useState, useMemo } from "react";
 import { useChildren, useBabyLogs, useAppointments } from "../hooks/useBaby";
 import Icon from "../components/Icon";
+import AppCalendar from "../components/AppCalendar";
 
 type Row = Record<string, any>;
 
-// ── Shared helper ────────────────────────────────────────────────
+// ── Shared helpers ─────────────────────────────────────────────────
 function formatMinutes(mins: number) {
   if (mins < 60) return `${mins} דק'`;
   const h = Math.floor(mins / 60);
   const m = mins % 60;
   return m > 0 ? `${h} שע' ${m} דק'` : `${h} שעה`;
+}
+
+/** Returns current local time as "YYYY-MM-DDTHH:mm" (for datetime-local / AppCalendar) */
+function nowLocal(): string {
+  const now = new Date();
+  const p = (n: number) => String(n).padStart(2, "0");
+  return `${now.getFullYear()}-${p(now.getMonth() + 1)}-${p(now.getDate())}T${p(now.getHours())}:${p(now.getMinutes())}`;
 }
 
 const LOG_LABELS: Record<string, string> = {
@@ -47,12 +55,11 @@ function AddLogModal({ logType, lastAmount, onClose, onSave }: {
   onClose: () => void;
   onSave: (log: Row) => void;
 }) {
-  const now = new Date();
-  const [eventAt, setEventAt] = useState(now.toISOString().slice(0, 16));
+  const [eventAt, setEventAt] = useState(nowLocal());
   const [amount, setAmount] = useState(lastAmount ?? 120);
   const [tummyMinutes, setTummyMinutes] = useState(10);
   const [diaperTypes, setDiaperTypes] = useState<string[]>(["pee"]);
-  const [sleepStart, setSleepStart] = useState(now.toISOString().slice(0, 16));
+  const [sleepStart, setSleepStart] = useState(nowLocal());
   const [notes, setNotes] = useState("");
 
   const toggleDiaper = (id: string) => {
@@ -79,24 +86,21 @@ function AddLogModal({ logType, lastAmount, onClose, onSave }: {
 
   return (
     <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
-      <form onSubmit={handleSubmit} className="bg-slate-900 border border-slate-700 rounded-2xl p-5 w-full max-w-sm space-y-4">
+      <form onSubmit={handleSubmit}
+        className="bg-slate-900 border border-slate-700 rounded-2xl p-5 w-full max-w-sm space-y-4 overflow-y-auto max-h-[92dvh]">
         <div className="flex items-center justify-between">
           <h3 className="font-semibold text-theme">{LOG_LABELS[logType] ?? logType}</h3>
           <button type="button" onClick={onClose} className="text-theme-muted hover:text-theme"><Icon name="x" className="w-4 h-4" /></button>
         </div>
 
         {/* Time */}
-        <div>
-          <label className="text-xs text-theme-muted block mb-1">
-            {logType === "sleep" ? "שעת תחילת שינה" : "שעת האירוע"}
-          </label>
-          <input
-            type="datetime-local"
-            value={logType === "sleep" ? sleepStart : eventAt}
-            onChange={e => logType === "sleep" ? setSleepStart(e.target.value) : setEventAt(e.target.value)}
-            className="input-base w-full"
-          />
-        </div>
+        <AppCalendar
+          mode="datetime"
+          value={logType === "sleep" ? sleepStart : eventAt}
+          onChange={logType === "sleep" ? setSleepStart : setEventAt}
+          label={logType === "sleep" ? "שעת תחילת שינה" : "שעת האירוע"}
+          inline
+        />
 
         {/* Feeding amount */}
         {logType === "feeding" && (
@@ -168,9 +172,15 @@ function AddLogModal({ logType, lastAmount, onClose, onSave }: {
   );
 }
 
-/* ─── Edit Log Inline ─── */
+/* ─── Edit Log Modal ─── */
 function EditLogModal({ log, onClose, onSave }: { log: Row; onClose: () => void; onSave: (l: Row) => void }) {
-  const [eventAt, setEventAt] = useState(log.event_at?.slice(0, 16) ?? "");
+  // Convert stored UTC ISO to local datetime string
+  const toLocalDT = (iso: string) => {
+    const d = new Date(iso);
+    const p = (n: number) => String(n).padStart(2, "0");
+    return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`;
+  };
+  const [eventAt, setEventAt] = useState(log.event_at ? toLocalDT(log.event_at) : nowLocal());
   const [amount, setAmount] = useState(log.amount ?? 0);
   const [notes, setNotes] = useState(log.notes ?? "");
   const isTummy = log.log_type === "tummy_time";
@@ -182,15 +192,14 @@ function EditLogModal({ log, onClose, onSave }: { log: Row; onClose: () => void;
         onSave({ id: log.id, event_at: new Date(eventAt).toISOString(), amount: (log.log_type === "feeding" || isTummy) ? amount : log.amount, notes: notes || null });
         onClose();
       }}
-        className="bg-slate-900 border border-slate-700 rounded-2xl p-5 w-full max-w-sm space-y-4">
+        className="bg-slate-900 border border-slate-700 rounded-2xl p-5 w-full max-w-sm space-y-4 overflow-y-auto max-h-[92dvh]">
         <div className="flex items-center justify-between">
           <h3 className="font-semibold text-theme">עריכת {LOG_LABELS[log.log_type] ?? log.log_type}</h3>
           <button type="button" onClick={onClose} className="text-theme-muted hover:text-theme"><Icon name="x" className="w-4 h-4" /></button>
         </div>
-        <div>
-          <label className="text-xs text-theme-muted block mb-1">זמן</label>
-          <input type="datetime-local" value={eventAt} onChange={e => setEventAt(e.target.value)} className="input-base w-full" />
-        </div>
+
+        <AppCalendar mode="datetime" value={eventAt} onChange={setEventAt} label="זמן" inline />
+
         {log.log_type === "feeding" && (
           <div>
             <label className="text-xs text-theme-muted block mb-1">כמות (מ״ל)</label>
@@ -236,7 +245,7 @@ function EditLogModal({ log, onClose, onSave }: { log: Row; onClose: () => void;
   );
 }
 
-/* ─── Events Modal (replaces appointments) ─── */
+/* ─── Add Event Modal ─── */
 function AddEventModal({ children, onClose, onSave }: { children: Row[]; onClose: () => void; onSave: (a: Row) => void }) {
   const [title, setTitle] = useState("");
   const [startsAt, setStartsAt] = useState("");
@@ -245,25 +254,91 @@ function AddEventModal({ children, onClose, onSave }: { children: Row[]; onClose
   const [loc, setLoc] = useState("");
   return (
     <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
-      <form onSubmit={e => { e.preventDefault(); onSave({ title, starts_at: startsAt, child_id: childId || null, provider_name: provider || null, location: loc || null, status: "scheduled" }); onClose(); }}
-        className="bg-slate-900 border border-slate-700 rounded-2xl p-5 w-full max-w-sm space-y-4">
+      <form onSubmit={e => {
+        e.preventDefault();
+        onSave({ title, starts_at: startsAt ? new Date(startsAt).toISOString() : null, child_id: childId || null, provider_name: provider || null, location: loc || null, status: "scheduled" });
+        onClose();
+      }}
+        className="bg-slate-900 border border-slate-700 rounded-2xl p-5 w-full max-w-sm space-y-4 overflow-y-auto max-h-[92dvh]">
         <div className="flex items-center justify-between">
           <h3 className="font-semibold text-theme">אירוע חדש</h3>
           <button type="button" onClick={onClose} className="text-theme-muted hover:text-theme"><Icon name="x" className="w-4 h-4" /></button>
         </div>
-        <div><label className="text-xs text-theme-muted block mb-1">כותרת *</label><input required value={title} onChange={e => setTitle(e.target.value)} className="input-base w-full" placeholder="ביקור רופא / חיסון / אירוע" /></div>
-        <div><label className="text-xs text-theme-muted block mb-1">תאריך ושעה *</label><input type="datetime-local" required value={startsAt} onChange={e => setStartsAt(e.target.value)} className="input-base w-full" /></div>
+        <div>
+          <label className="text-xs text-theme-muted block mb-1">כותרת *</label>
+          <input required value={title} onChange={e => setTitle(e.target.value)} className="input-base w-full" placeholder="ביקור רופא / חיסון / אירוע" />
+        </div>
+        <AppCalendar mode="datetime" value={startsAt} onChange={setStartsAt} label="תאריך ושעה *" inline />
         {children.length > 0 && (
-          <div><label className="text-xs text-theme-muted block mb-1">תינוק/ת</label>
+          <div>
+            <label className="text-xs text-theme-muted block mb-1">תינוק/ת</label>
             <select value={childId} onChange={e => setChildId(e.target.value)} className="input-base w-full">
               <option value="">— כללי —</option>
               {children.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
             </select>
           </div>
         )}
-        <div><label className="text-xs text-theme-muted block mb-1">רופא / מטפל</label><input value={provider} onChange={e => setProvider(e.target.value)} className="input-base w-full" placeholder="ד״ר כהן" /></div>
-        <div><label className="text-xs text-theme-muted block mb-1">מיקום</label><input value={loc} onChange={e => setLoc(e.target.value)} className="input-base w-full" placeholder="כתובת" /></div>
-        <button type="submit" className="w-full bg-accent-600 hover:bg-accent-500 text-white font-medium py-2 rounded-lg text-sm transition-colors">שמור אירוע</button>
+        <div>
+          <label className="text-xs text-theme-muted block mb-1">רופא / מטפל</label>
+          <input value={provider} onChange={e => setProvider(e.target.value)} className="input-base w-full" placeholder='ד"ר כהן' />
+        </div>
+        <div>
+          <label className="text-xs text-theme-muted block mb-1">מיקום</label>
+          <input value={loc} onChange={e => setLoc(e.target.value)} className="input-base w-full" placeholder="כתובת" />
+        </div>
+        <button type="submit" disabled={!title || !startsAt} className="w-full bg-accent-600 hover:bg-accent-500 disabled:opacity-50 text-white font-medium py-2 rounded-lg text-sm transition-colors">שמור אירוע</button>
+      </form>
+    </div>
+  );
+}
+
+/* ─── Edit Event Modal ─── */
+function EditEventModal({ event, children, onClose, onSave }: { event: Row; children: Row[]; onClose: () => void; onSave: (a: Row) => void }) {
+  const toLocalDT = (iso: string) => {
+    const d = new Date(iso);
+    const p = (n: number) => String(n).padStart(2, "0");
+    return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`;
+  };
+  const [title, setTitle] = useState(event.title ?? "");
+  const [startsAt, setStartsAt] = useState(event.starts_at ? toLocalDT(event.starts_at) : "");
+  const [childId, setChildId] = useState(event.child_id ?? "");
+  const [provider, setProvider] = useState(event.provider_name ?? "");
+  const [loc, setLoc] = useState(event.location ?? "");
+  return (
+    <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
+      <form onSubmit={e => {
+        e.preventDefault();
+        onSave({ id: event.id, title, starts_at: startsAt ? new Date(startsAt).toISOString() : null, child_id: childId || null, provider_name: provider || null, location: loc || null });
+        onClose();
+      }}
+        className="bg-slate-900 border border-slate-700 rounded-2xl p-5 w-full max-w-sm space-y-4 overflow-y-auto max-h-[92dvh]">
+        <div className="flex items-center justify-between">
+          <h3 className="font-semibold text-theme">עריכת אירוע</h3>
+          <button type="button" onClick={onClose} className="text-theme-muted hover:text-theme"><Icon name="x" className="w-4 h-4" /></button>
+        </div>
+        <div>
+          <label className="text-xs text-theme-muted block mb-1">כותרת *</label>
+          <input required value={title} onChange={e => setTitle(e.target.value)} className="input-base w-full" />
+        </div>
+        <AppCalendar mode="datetime" value={startsAt} onChange={setStartsAt} label="תאריך ושעה" inline />
+        {children.length > 0 && (
+          <div>
+            <label className="text-xs text-theme-muted block mb-1">תינוק/ת</label>
+            <select value={childId} onChange={e => setChildId(e.target.value)} className="input-base w-full">
+              <option value="">— כללי —</option>
+              {children.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+            </select>
+          </div>
+        )}
+        <div>
+          <label className="text-xs text-theme-muted block mb-1">רופא / מטפל</label>
+          <input value={provider} onChange={e => setProvider(e.target.value)} className="input-base w-full" placeholder='ד"ר כהן' />
+        </div>
+        <div>
+          <label className="text-xs text-theme-muted block mb-1">מיקום</label>
+          <input value={loc} onChange={e => setLoc(e.target.value)} className="input-base w-full" placeholder="כתובת" />
+        </div>
+        <button type="submit" className="w-full bg-accent-600 hover:bg-accent-500 text-white font-medium py-2 rounded-lg text-sm transition-colors">שמור</button>
       </form>
     </div>
   );
@@ -366,6 +441,7 @@ export default function Baby() {
   const { data: appointments = [], upsertAppointment, deleteAppointment } = useAppointments();
   const [tab, setTab] = useState<"logs" | "charts" | "events">("logs");
   const [eventModal, setEventModal] = useState(false);
+  const [editingEvent, setEditingEvent] = useState<Row | null>(null);
   const [addLogType, setAddLogType] = useState<string | null>(null);
   const [editingLog, setEditingLog] = useState<Row | null>(null);
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().slice(0, 10));
@@ -439,30 +515,22 @@ export default function Baby() {
 
       {/* Date Navigation */}
       {children.length > 0 && tab === "logs" && (
-        <div className="flex items-center gap-3 mb-5">
-          <button onClick={() => navigateDate(-1)} className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-theme-muted hover:text-theme transition-colors">
+        <div className="flex items-center gap-2 mb-5 flex-wrap">
+          <button onClick={() => navigateDate(-1)} className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-theme-muted hover:text-theme transition-colors shrink-0">
             <Icon name="chevron-right" className="w-4 h-4" />
           </button>
-          <div className="flex items-center gap-2">
-            <input
-              type="date"
-              value={selectedDate}
-              onChange={e => setSelectedDate(e.target.value)}
-              className="input-base text-sm py-1.5"
-            />
-            {!isToday && (
-              <button onClick={() => setSelectedDate(new Date().toISOString().slice(0, 10))}
-                className="text-xs text-accent-400 hover:text-accent-300 font-medium">
-                היום
-              </button>
-            )}
+          <div className="flex-1 min-w-0">
+            <AppCalendar value={selectedDate} onChange={setSelectedDate} placeholder="בחר תאריך" />
           </div>
-          <button onClick={() => navigateDate(1)} className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-theme-muted hover:text-theme transition-colors">
+          {!isToday && (
+            <button onClick={() => setSelectedDate(new Date().toISOString().slice(0, 10))}
+              className="text-xs text-accent-400 hover:text-accent-300 font-medium shrink-0">
+              היום
+            </button>
+          )}
+          <button onClick={() => navigateDate(1)} className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-theme-muted hover:text-theme transition-colors shrink-0">
             <Icon name="chevron-left" className="w-4 h-4" />
           </button>
-          <span className="text-xs text-theme-muted">
-            {new Date(selectedDate + "T12:00:00").toLocaleDateString("he-IL", { weekday: "long", day: "numeric", month: "long" })}
-          </span>
         </div>
       )}
 
@@ -527,9 +595,9 @@ export default function Baby() {
                           {log.log_type === "tummy_time" ? formatMinutes(log.amount) : `${log.amount} ${log.unit ?? "מ״ל"}`}
                         </div>
                       )}
-                      {log.notes && <div className="text-xs text-theme-muted opacity-70">{log.notes}</div>}
+                      {log.notes && <div className="text-xs text-theme-muted opacity-70 truncate">{log.notes}</div>}
                     </div>
-                    <span className="text-xs text-theme-muted">{new Date(log.event_at).toLocaleTimeString("he-IL", { hour: "2-digit", minute: "2-digit" })}</span>
+                    <span className="text-xs text-theme-muted shrink-0">{new Date(log.event_at).toLocaleTimeString("he-IL", { hour: "2-digit", minute: "2-digit" })}</span>
                     <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                       <button onClick={() => setEditingLog(log)} className="text-theme-muted hover:text-accent-400">
                         <Icon name="edit" className="w-3.5 h-3.5" />
@@ -550,7 +618,7 @@ export default function Baby() {
             <DailyCharts logs={logs} days={7} />
           )}
 
-          {/* ─── Events Tab (replaces appointments) ─── */}
+          {/* ─── Events Tab ─── */}
           {tab === "events" && (
             <div className="space-y-3">
               {appointments.length === 0 && <div className="text-center py-10 text-theme-muted">אין אירועים. הוסף אירוע חדש.</div>}
@@ -560,14 +628,19 @@ export default function Baby() {
                     <div className="text-sm font-bold text-accent-400">{new Date(appt.starts_at).toLocaleDateString("he-IL", { month: "short", day: "numeric" })}</div>
                     <div className="text-xs text-theme-muted">{new Date(appt.starts_at).toLocaleTimeString("he-IL", { hour: "2-digit", minute: "2-digit" })}</div>
                   </div>
-                  <div className="flex-1">
-                    <div className="font-medium text-sm text-theme">{appt.title}</div>
+                  <div className="flex-1 min-w-0">
+                    <div className="font-medium text-sm text-theme truncate">{appt.title}</div>
                     {appt.provider_name && <div className="text-xs text-theme-muted mt-0.5">{appt.provider_name}</div>}
-                    {appt.location && <div className="text-xs text-theme-muted opacity-70">{appt.location}</div>}
+                    {appt.location && <div className="text-xs text-theme-muted opacity-70 truncate">{appt.location}</div>}
                   </div>
-                  <button onClick={() => deleteAppointment.mutate(appt.id)} className="text-theme-muted hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity">
-                    <Icon name="trash" className="w-3.5 h-3.5" />
-                  </button>
+                  <div className="flex gap-1 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <button onClick={() => setEditingEvent(appt)} className="text-theme-muted hover:text-accent-400 transition-colors">
+                      <Icon name="edit" className="w-3.5 h-3.5" />
+                    </button>
+                    <button onClick={() => deleteAppointment.mutate(appt.id)} className="text-theme-muted hover:text-red-400 transition-colors">
+                      <Icon name="trash" className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
                 </div>
               ))}
             </div>
@@ -587,7 +660,13 @@ export default function Baby() {
       {editingLog && (
         <EditLogModal log={editingLog} onClose={() => setEditingLog(null)} onSave={log => updateLog.mutate(log)} />
       )}
-      {eventModal && <AddEventModal children={children} onClose={() => setEventModal(false)} onSave={data => upsertAppointment.mutate(data)} />}
+      {eventModal && (
+        <AddEventModal children={children} onClose={() => setEventModal(false)} onSave={data => upsertAppointment.mutate(data)} />
+      )}
+      {editingEvent && (
+        <EditEventModal event={editingEvent} children={children} onClose={() => setEditingEvent(null)} onSave={data => upsertAppointment.mutate(data)} />
+      )}
     </div>
   );
 }
+

@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import { Routes, Route, Navigate } from "react-router-dom";
+import { Routes, Route, Navigate, useNavigate } from "react-router-dom";
 import { useAuth } from "./contexts/AuthContext";
 import { useProfile } from "./hooks/useProfile";
 import { useThemeStore } from "./state/stores/themeStore";
@@ -12,7 +12,6 @@ import Inventory from "./pages/Inventory";
 import Baby from "./pages/Baby";
 import Finance from "./pages/Finance";
 import Settings from "./pages/Settings";
-import ResetPassword from "./pages/ResetPassword";
 
 function hexToRgb(hex: string) {
   const cleaned = hex.replace("#", "");
@@ -24,11 +23,10 @@ function hexToRgb(hex: string) {
 }
 
 function AppRoutes() {
-  const { user, loading: authLoading, isRecovery } = useAuth();
+  const { user, loading: authLoading, isRecovery, clearRecovery } = useAuth();
   const { data: profile, isLoading: profileLoading } = useProfile();
   const { accentColor, accentCustom, appBg, menuBg, textPrimary, textMuted } = useThemeStore();
-
-  // ...existing code... (useEffect for CSS vars)
+  const navigate = useNavigate();
 
   useEffect(() => {
     const root = document.documentElement;
@@ -52,6 +50,15 @@ function AppRoutes() {
     }
   }, [accentColor, accentCustom, appBg, menuBg, textPrimary, textMuted]);
 
+  // When arriving via a password-recovery email link, redirect to Settings
+  // where the user can change their password in-app.
+  useEffect(() => {
+    if (user && isRecovery && profile) {
+      clearRecovery();
+      navigate("/settings?change-password=1", { replace: true });
+    }
+  }, [user, isRecovery, profile, clearRecovery, navigate]);
+
   if (authLoading || (user && profileLoading)) {
     return (
       <div className="min-h-screen flex items-center justify-center" style={{ backgroundColor: appBg }}>
@@ -59,10 +66,6 @@ function AppRoutes() {
       </div>
     );
   }
-
-  // Password recovery flow — user is temporarily signed in with a recovery token.
-  // Show the reset form immediately instead of the normal app.
-  if (user && isRecovery) return <ResetPassword />;
 
   if (!user) return <Login />;
   if (!profile) return <Setup />;

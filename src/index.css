@@ -79,6 +79,22 @@ body {
   font-family: Heebo, system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
   background-color: var(--app-bg);
   color: var(--text-primary);
+  /* Prevent horizontal scroll from text/layout overflow on mobile */
+  overflow-x: hidden;
+}
+
+/* Prevent iOS Safari auto-zoom on input focus (requires font-size ≥ 16px on inputs) */
+@supports (-webkit-touch-callout: none) {
+  input:not([type="range"]):not([type="checkbox"]):not([type="radio"]),
+  select,
+  textarea {
+    font-size: 16px !important;
+  }
+}
+
+/* Ensure flex / grid children can shrink and truncate properly on mobile */
+.min-w-0-children > * {
+  min-width: 0;
 }
 
 /* RTL-aware scroll */

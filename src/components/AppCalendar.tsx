@@ -2,6 +2,7 @@ import { useState, useRef, useEffect } from "react";
 import Icon from "./Icon";
 const MONTH_NAMES = ["ינואר","פברואר","מרץ","אפריל","מאי","יוני","יולי","אוגוסט","ספטמבר","אוקטובר","נובמבר","דצמבר"];
 const DAY_NAMES = ["א","ב","ג","ד","ה","ו","ש"];
+
 interface AppCalendarProps {
   value: string;
   onChange: (val: string) => void;
@@ -11,6 +12,7 @@ interface AppCalendarProps {
   className?: string;
   inline?: boolean;
 }
+
 export default function AppCalendar({
   value, onChange, mode = "date", placeholder, label, className, inline = false
 }: AppCalendarProps) {
@@ -25,17 +27,27 @@ export default function AppCalendar({
     value && value.includes("T") ? value.slice(11, 16) : "09:00"
   );
   const today = new Date().toISOString().slice(0, 10);
+
   useEffect(() => {
     if (inline) return;
     const handle = (e: MouseEvent) => {
-      if (ref.current && ref.current.contains(e.target as Node) === false) setOpen(false);
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
     };
     document.addEventListener("mousedown", handle);
     return () => document.removeEventListener("mousedown", handle);
   }, [inline]);
+
   useEffect(() => {
     if (value && value.includes("T")) setTime(value.slice(11, 16));
   }, [value]);
+
+  useEffect(() => {
+    if (selectedDate) {
+      const d = new Date(selectedDate + "T12:00:00");
+      setView({ year: d.getFullYear(), month: d.getMonth() });
+    }
+  }, [selectedDate]);
+
   const prevMonth = () => setView(v =>
     v.month === 0 ? { year: v.year - 1, month: 11 } : { ...v, month: v.month - 1 }
   );
@@ -50,18 +62,32 @@ export default function AppCalendar({
       onChange(ds + "T" + time);
     } else {
       onChange(ds);
-      if (inline === false) setOpen(false);
+      if (!inline) setOpen(false);
     }
   };
   const handleTimeChange = (newTime: string) => {
     setTime(newTime);
     if (selectedDate) onChange(selectedDate + "T" + newTime);
   };
+  const goToday = () => {
+    const now = new Date();
+    setView({ year: now.getFullYear(), month: now.getMonth() });
+    if (mode === "datetime") {
+      const h = String(now.getHours()).padStart(2, "0");
+      const mi = String(now.getMinutes()).padStart(2, "0");
+      onChange(today + "T" + h + ":" + mi);
+    } else {
+      onChange(today);
+      if (!inline) setOpen(false);
+    }
+  };
+
   const firstDow = new Date(view.year, view.month, 1).getDay();
   const lastDate = new Date(view.year, view.month + 1, 0).getDate();
   const days: (number | null)[] = [];
   for (let i = 0; i < firstDow; i++) days.push(null);
   for (let d = 1; d <= lastDate; d++) days.push(d);
+
   const displayValue = selectedDate
     ? (mode === "datetime" && value.includes("T")
         ? new Date(value).toLocaleString("he-IL", {
@@ -72,26 +98,38 @@ export default function AppCalendar({
             year: "numeric", month: "2-digit", day: "2-digit",
           }))
     : "";
+
   const Panel = () => (
-    <div className="bg-slate-900 border border-slate-700 rounded-xl shadow-2xl p-3 w-64" dir="rtl">
+    <div
+      className="bg-slate-900 border border-slate-700 rounded-xl shadow-2xl p-3 w-72"
+      dir="rtl"
+      style={{ minWidth: "272px" }}
+    >
+      {/* Month navigation */}
       <div className="flex items-center justify-between mb-2">
         <button type="button" onClick={prevMonth}
-          className="text-theme-muted hover:text-theme p-1 rounded hover:bg-slate-800">
+          className="text-theme-muted hover:text-theme p-1.5 rounded-lg hover:bg-slate-800 transition-colors">
           <Icon name="chevron-right" className="w-4 h-4" />
         </button>
-        <span className="text-sm font-semibold text-theme">
-          {MONTH_NAMES[view.month]} {view.year}
-        </span>
+        <div className="flex items-center gap-2">
+          <span className="text-sm font-semibold text-theme">
+            {MONTH_NAMES[view.month]} {view.year}
+          </span>
+        </div>
         <button type="button" onClick={nextMonth}
-          className="text-theme-muted hover:text-theme p-1 rounded hover:bg-slate-800">
+          className="text-theme-muted hover:text-theme p-1.5 rounded-lg hover:bg-slate-800 transition-colors">
           <Icon name="chevron-left" className="w-4 h-4" />
         </button>
       </div>
+
+      {/* Day headers */}
       <div className="grid grid-cols-7 mb-1">
         {DAY_NAMES.map(d => (
-          <div key={d} className="text-center text-xs text-theme-muted py-1 font-medium">{d}</div>
+          <div key={d} className="text-center text-[10px] text-theme-muted py-1 font-medium">{d}</div>
         ))}
       </div>
+
+      {/* Days grid */}
       <div className="grid grid-cols-7 gap-0.5">
         {days.map((day, i) => {
           if (day === null) return <div key={i} />;
@@ -103,11 +141,11 @@ export default function AppCalendar({
           return (
             <button key={i} type="button" onClick={() => selectDay(day)}
               className={
-                "text-xs py-1.5 rounded-lg transition-colors text-center " +
+                "text-xs py-1.5 rounded-lg transition-colors text-center font-medium " +
                 (isSel
-                  ? "bg-accent-600 text-white font-medium"
+                  ? "bg-accent-600 text-white"
                   : isTod
-                  ? "border border-accent-500 text-accent-400"
+                  ? "border border-accent-500 text-accent-400 hover:bg-slate-800"
                   : "text-theme hover:bg-slate-800")
               }>
               {day}
@@ -115,6 +153,21 @@ export default function AppCalendar({
           );
         })}
       </div>
+
+      {/* Today button */}
+      <div className="mt-2 pt-2 border-t border-slate-800 flex items-center justify-between">
+        <button type="button" onClick={goToday}
+          className="text-xs text-accent-400 hover:text-accent-300 font-medium transition-colors">
+          היום
+        </button>
+        {selectedDate && (
+          <span className="text-[10px] text-theme-muted">
+            {new Date(selectedDate + "T12:00:00").toLocaleDateString("he-IL", { weekday: "long", day: "numeric", month: "long" })}
+          </span>
+        )}
+      </div>
+
+      {/* Time picker for datetime mode */}
       {mode === "datetime" && (
         <div className="mt-3 pt-3 border-t border-slate-700">
           <label className="text-xs text-theme-muted block mb-1">שעה</label>
@@ -125,6 +178,7 @@ export default function AppCalendar({
       )}
     </div>
   );
+
   if (inline) {
     return (
       <div className={className}>
@@ -133,6 +187,7 @@ export default function AppCalendar({
       </div>
     );
   }
+
   return (
     <div ref={ref} className={"relative " + (className ?? "")}>
       {label && <label className="text-xs text-theme-muted block mb-1">{label}</label>}
@@ -144,7 +199,7 @@ export default function AppCalendar({
         <Icon name="calendar" className="w-4 h-4 text-theme-muted shrink-0" />
       </button>
       {open && (
-        <div className="absolute top-full mt-1.5 z-50 left-0">
+        <div className="absolute top-full mt-1.5 z-[60] start-0 max-w-[calc(100vw-2rem)]">
           <Panel />
         </div>
       )}

@@ -6,7 +6,7 @@ type IconName =
   | "filter" | "drag" | "star" | "palette" | "send" | "diaper" | "pill" | "chart"
   | "hand-wave" | "upload" | "bar-chart" | "repeat" | "users" | "trending-up"
   | "pie-chart" | "refresh" | "tag" | "chevron-down" | "chevron-up" | "credit-card"
-  | "download" | "layers" | "minus" | "external-link" | "eye" | "grid";
+  | "download" | "layers" | "minus" | "external-link" | "eye" | "grid" | "lock";
 
 export default function Icon({
   name,
@@ -409,6 +409,8 @@ export default function Icon({
       return (<svg viewBox="0 0 24 24" className={className} aria-hidden="true" {...common}><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>);
     case "grid":
       return (<svg viewBox="0 0 24 24" className={className} aria-hidden="true" {...common}><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>);
+    case "lock":
+      return (<svg viewBox="0 0 24 24" className={className} aria-hidden="true" {...common}><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>);
     default:
       return (<svg viewBox="0 0 24 24" className={className} aria-hidden="true" {...common}><circle cx="12" cy="12" r="8"/></svg>);
   }

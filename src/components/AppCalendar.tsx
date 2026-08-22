@@ -1,5 +1,12 @@
 import { useState, useRef, useEffect } from "react";
 import Icon from "./Icon";
+import { usePreferencesStore } from "../state/stores/preferencesStore";
+import {
+  getNowInTimeZoneInput,
+  getTodayInTimeZone,
+  utcIsoToDateTimeInput,
+  formatInTimeZone,
+} from "../lib/datetime";
 const MONTH_NAMES = ["ינואר","פברואר","מרץ","אפריל","מאי","יוני","יולי","אוגוסט","ספטמבר","אוקטובר","נובמבר","דצמבר"];
 const DAY_NAMES = ["א","ב","ג","ד","ה","ו","ש"];
 
@@ -16,17 +23,21 @@ interface AppCalendarProps {
 export default function AppCalendar({
   value, onChange, mode = "date", placeholder, label, className, inline = false
 }: AppCalendarProps) {
+  const timeZone = usePreferencesStore((s) => s.timeZone);
   const [open, setOpen] = useState(inline);
   const ref = useRef<HTMLDivElement>(null);
-  const selectedDate = value ? value.slice(0, 10) : "";
+  const normalizedValue = mode === "datetime" && /Z$|[+-]\d{2}:\d{2}$/.test(value)
+    ? utcIsoToDateTimeInput(value, timeZone)
+    : value;
+  const selectedDate = normalizedValue ? normalizedValue.slice(0, 10) : "";
   const [view, setView] = useState(() => {
-    const d = selectedDate ? new Date(selectedDate + "T12:00:00") : new Date();
+    const d = selectedDate ? new Date(selectedDate + "T12:00:00") : new Date(getNowInTimeZoneInput(timeZone));
     return { year: d.getFullYear(), month: d.getMonth() };
   });
   const [time, setTime] = useState(
-    value && value.includes("T") ? value.slice(11, 16) : "09:00"
+    normalizedValue && normalizedValue.includes("T") ? normalizedValue.slice(11, 16) : "09:00"
   );
-  const today = new Date().toISOString().slice(0, 10);
+  const today = getTodayInTimeZone(timeZone);
 
   useEffect(() => {
     if (inline) return;
@@ -38,8 +49,8 @@ export default function AppCalendar({
   }, [inline]);
 
   useEffect(() => {
-    if (value && value.includes("T")) setTime(value.slice(11, 16));
-  }, [value]);
+    if (normalizedValue && normalizedValue.includes("T")) setTime(normalizedValue.slice(11, 16));
+  }, [normalizedValue]);
 
   useEffect(() => {
     if (selectedDate) {
@@ -60,6 +71,7 @@ export default function AppCalendar({
     const ds = view.year + "-" + m + "-" + d;
     if (mode === "datetime") {
       onChange(ds + "T" + time);
+      if (!inline) setOpen(false);
     } else {
       onChange(ds);
       if (!inline) setOpen(false);
@@ -70,12 +82,11 @@ export default function AppCalendar({
     if (selectedDate) onChange(selectedDate + "T" + newTime);
   };
   const goToday = () => {
-    const now = new Date();
+    const now = new Date(getNowInTimeZoneInput(timeZone));
     setView({ year: now.getFullYear(), month: now.getMonth() });
     if (mode === "datetime") {
-      const h = String(now.getHours()).padStart(2, "0");
-      const mi = String(now.getMinutes()).padStart(2, "0");
-      onChange(today + "T" + h + ":" + mi);
+      onChange(getNowInTimeZoneInput(timeZone));
+      if (!inline) setOpen(false);
     } else {
       onChange(today);
       if (!inline) setOpen(false);
@@ -89,12 +100,12 @@ export default function AppCalendar({
   for (let d = 1; d <= lastDate; d++) days.push(d);
 
   const displayValue = selectedDate
-    ? (mode === "datetime" && value.includes("T")
-        ? new Date(value).toLocaleString("he-IL", {
+    ? (mode === "datetime" && normalizedValue.includes("T")
+        ? formatInTimeZone(normalizedValue, timeZone, {
             year: "numeric", month: "2-digit", day: "2-digit",
             hour: "2-digit", minute: "2-digit",
           })
-        : new Date(selectedDate + "T12:00:00").toLocaleDateString("he-IL", {
+        : formatInTimeZone(selectedDate + "T12:00:00", timeZone, {
             year: "numeric", month: "2-digit", day: "2-digit",
           }))
     : "";
@@ -162,20 +173,10 @@ export default function AppCalendar({
         </button>
         {selectedDate && (
           <span className="text-[10px] text-theme-muted">
-            {new Date(selectedDate + "T12:00:00").toLocaleDateString("he-IL", { weekday: "long", day: "numeric", month: "long" })}
+            {formatInTimeZone(selectedDate + "T12:00:00", timeZone, { weekday: "long", day: "numeric", month: "long" })}
           </span>
         )}
       </div>
-
-      {/* Time picker for datetime mode */}
-      {mode === "datetime" && (
-        <div className="mt-3 pt-3 border-t border-slate-700">
-          <label className="text-xs text-theme-muted block mb-1">שעה</label>
-          <input type="time" value={time}
-            onChange={e => handleTimeChange(e.target.value)}
-            className="input-base w-full text-sm py-1.5" />
-        </div>
-      )}
     </div>
   );
 
@@ -184,6 +185,17 @@ export default function AppCalendar({
       <div className={className}>
         {label && <label className="text-xs text-theme-muted block mb-1">{label}</label>}
         <Panel />
+        {mode === "datetime" && (
+          <div className="mt-2">
+            <label className="text-xs text-theme-muted block mb-1">שעה</label>
+            <input
+              type="time"
+              value={time}
+              onChange={e => handleTimeChange(e.target.value)}
+              className="input-base w-full text-sm py-1.5"
+            />
+          </div>
+        )}
       </div>
     );
   }
@@ -201,6 +213,17 @@ export default function AppCalendar({
       {open && (
         <div className="absolute top-full mt-1.5 z-[60] start-0 max-w-[calc(100vw-2rem)]">
           <Panel />
+        </div>
+      )}
+      {mode === "datetime" && (
+        <div className="mt-2">
+          <label className="text-xs text-theme-muted block mb-1">שעה</label>
+          <input
+            type="time"
+            value={time}
+            onChange={e => handleTimeChange(e.target.value)}
+            className="input-base w-full text-sm py-1.5"
+          />
         </div>
       )}
     </div>

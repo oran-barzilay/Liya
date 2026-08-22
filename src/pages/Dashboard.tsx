@@ -5,6 +5,8 @@ import { useTransactions } from "../hooks/useFinance";
 import { useAppointments, useBabyLogs, useChildren } from "../hooks/useBaby";
 import { useProfile } from "../hooks/useProfile";
 import Icon from "../components/Icon";
+import { usePreferencesStore } from "../state/stores/preferencesStore";
+import { formatInTimeZone, getTodayInTimeZone } from "../lib/datetime";
 
 function formatMinutes(mins: number) {
   if (mins < 60) return `${mins} דק'`;
@@ -33,6 +35,7 @@ function StatCard({ icon, label, value, sub, color = "accent" }: {
 }
 
 export default function Dashboard() {
+  const timeZone = usePreferencesStore((s) => s.timeZone);
   const { data: profile } = useProfile();
   const { data: tasks = [] } = useTasks();
   const { data: inventory = [] } = useInventory();
@@ -41,8 +44,8 @@ export default function Dashboard() {
   const { data: children = [] } = useChildren();
   const { data: allBabyLogs = [] } = useBabyLogs();          // all children, no filter
   const [copied, setCopied] = useState(false);
-  const today = new Date().toISOString().slice(0, 10);
-  const hour = new Date().getHours();
+  const today = getTodayInTimeZone(timeZone);
+  const hour = Number(formatInTimeZone(new Date(), timeZone, { hour: "2-digit", hour12: false }, "en-GB"));
   const greeting = hour < 12 ? "בוקר טוב" : hour < 17 ? "צהריים טובים" : "ערב טוב";
   const todayTimeSensitive = tasks.filter(t => t.task_type === "time_sensitive" && t.status !== "done" && t.scheduled_start_at?.slice(0, 10) === today);
   const todoTasks = tasks.filter(t => t.status === "todo");
@@ -72,7 +75,7 @@ export default function Dashboard() {
         <div>
           <h2 className="text-2xl font-bold text-theme">{greeting}, {profile?.display_name ?? ""}!</h2>
           <p className="text-theme-muted text-sm mt-1">
-            {new Date().toLocaleDateString("he-IL", { weekday: "long", year: "numeric", month: "long", day: "numeric" })}
+            {formatInTimeZone(new Date(), timeZone, { weekday: "long", year: "numeric", month: "long", day: "numeric" })}
           </p>
         </div>
       </div>
@@ -85,7 +88,7 @@ export default function Dashboard() {
           sub={"הכנסות ₪" + totals.income.toLocaleString("he-IL") + " | הוצאות ₪" + totals.expenses.toLocaleString("he-IL")}
           color={balance >= 0 ? "emerald" : "red"} />
         <StatCard icon={<Icon name="medical" className="w-6 h-6" />} label="אירוע הבא"
-          value={nextAppt ? new Date(nextAppt.starts_at).toLocaleDateString("he-IL", { month: "short", day: "numeric" }) : "אין"}
+          value={nextAppt ? formatInTimeZone(nextAppt.starts_at, timeZone, { month: "short", day: "numeric" }) : "אין"}
           sub={nextAppt?.title ?? "אין אירועים קרובים"} color="amber" />
       </div>
 
@@ -128,7 +131,7 @@ export default function Dashboard() {
               <div key={task.id} className="flex items-center gap-3 bg-slate-900 border border-slate-800 rounded-xl px-4 py-3">
                 <span className="text-sm font-medium flex-1 text-theme">{task.title}</span>
                 {task.scheduled_start_at && (
-                  <span className="text-xs text-theme-muted">{new Date(task.scheduled_start_at).toLocaleTimeString("he-IL", { hour: "2-digit", minute: "2-digit" })}</span>
+                  <span className="text-xs text-theme-muted">{formatInTimeZone(task.scheduled_start_at, timeZone, { hour: "2-digit", minute: "2-digit" })}</span>
                 )}
                 <span className={"text-xs px-2 py-0.5 rounded-full " + (task.status === "in_progress" ? "bg-accent-900 text-accent-300" : "bg-slate-800 text-theme-muted")}>
                   {task.status === "todo" ? "לביצוע" : task.status === "in_progress" ? "בביצוע" : "בוצע"}

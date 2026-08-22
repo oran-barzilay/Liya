@@ -3,6 +3,8 @@ import { useTasks } from "../hooks/useTasks";
 import { useUiStore } from "../state/stores/uiStore";
 import Icon from "../components/Icon";
 import AppCalendar from "../components/AppCalendar";
+import { usePreferencesStore } from "../state/stores/preferencesStore";
+import { formatInTimeZone, getTodayInTimeZone, utcIsoToDateTimeInput, zonedDateTimeToUtcIso } from "../lib/datetime";
 type Task = Record<string, any>;
 const STATUS_LABEL: Record<string, string> = { todo: "לביצוע", in_progress: "בביצוע", done: "בוצע" };
 const STATUS_COLOR: Record<string, string> = {
@@ -54,6 +56,7 @@ function formatDayHeader(date: string) {
 function TaskCard({ task, onStatusChange, onDelete, onEdit }: {
   task: Task; onStatusChange: (s: string) => void; onDelete: () => void; onEdit: () => void;
 }) {
+  const timeZone = usePreferencesStore((s) => s.timeZone);
   const nextStatus: Record<string, string> = { todo: "in_progress", in_progress: "done", done: "todo" };
   return (
     <div className="bg-slate-900 border border-slate-800 rounded-xl p-3 space-y-2 group">
@@ -72,7 +75,7 @@ function TaskCard({ task, onStatusChange, onDelete, onEdit }: {
       <div className="flex items-center gap-2 flex-wrap">
         {task.priority_level && <span className={"text-xs px-1.5 py-0.5 rounded font-medium " + (PRIORITY_BADGE[task.priority_level] ?? "")}>P{task.priority_level}</span>}
         {task.due_at && <span className="text-xs text-theme-muted">יעד {new Date(task.due_at).toLocaleDateString("he-IL")}</span>}
-        {task.scheduled_start_at && <span className="text-xs text-accent-400">{new Date(task.scheduled_start_at).toLocaleTimeString("he-IL", { hour: "2-digit", minute: "2-digit" })}</span>}
+        {task.scheduled_start_at && <span className="text-xs text-accent-400">{formatInTimeZone(task.scheduled_start_at, timeZone, { hour: "2-digit", minute: "2-digit" })}</span>}
       </div>
       <button onClick={() => onStatusChange(nextStatus[task.status] ?? "todo")} className="text-xs text-theme-muted hover:text-accent-400 transition-colors">
         העבר ל-{STATUS_LABEL[nextStatus[task.status] ?? "todo"]}
@@ -110,6 +113,7 @@ function AddTaskModal({ onClose, onAdd, members }: {
   onClose: () => void; onAdd: (t: any) => void;
   members: Array<{ id: string; display_name: string }>;
 }) {
+  const timeZone = usePreferencesStore((s) => s.timeZone);
   const [title, setTitle] = useState("");
   const [taskType, setTaskType] = useState("priority");
   const [priority, setPriority] = useState("3");
@@ -129,7 +133,8 @@ function AddTaskModal({ onClose, onAdd, members }: {
           onAdd({
             title, task_type: taskType, status: "todo", module: "general", source_type: "manual",
             priority_level: taskType === "priority" ? Number(priority) : null,
-            due_at: dueAt || null, scheduled_start_at: scheduledStart || null,
+            due_at: dueAt ? zonedDateTimeToUtcIso(dueAt, timeZone) : null,
+            scheduled_start_at: scheduledStart ? zonedDateTimeToUtcIso(scheduledStart, timeZone) : null,
             description: desc || null, assigned_to: assignedTo || null,
             is_recurring: isRecurring, recurrence_rule: recurrenceRule,
           });
@@ -203,10 +208,11 @@ function EditTaskModal({ task, onClose, onSave, members }: {
   task: Task; onClose: () => void; onSave: (t: Task) => void;
   members: Array<{ id: string; display_name: string }>;
 }) {
+  const timeZone = usePreferencesStore((s) => s.timeZone);
   const [title, setTitle] = useState(task.title ?? "");
   const [priority, setPriority] = useState(String(task.priority_level ?? 3));
-  const [dueAt, setDueAt] = useState(task.due_at?.slice(0, 16) ?? "");
-  const [scheduledStart, setScheduledStart] = useState(task.scheduled_start_at?.slice(0, 16) ?? "");
+  const [dueAt, setDueAt] = useState(task.due_at ? utcIsoToDateTimeInput(task.due_at, timeZone) : "");
+  const [scheduledStart, setScheduledStart] = useState(task.scheduled_start_at ? utcIsoToDateTimeInput(task.scheduled_start_at, timeZone) : "");
   const [desc, setDesc] = useState(task.description ?? "");
   const [assignedTo, setAssignedTo] = useState(task.assigned_to ?? "");
   const [status, setStatus] = useState(task.status ?? "todo");
@@ -226,7 +232,8 @@ function EditTaskModal({ task, onClose, onSave, members }: {
           onSave({
             id: task.id, title, status, assigned_to: assignedTo || null,
             priority_level: task.task_type === "priority" ? Number(priority) : task.priority_level,
-            due_at: dueAt || null, scheduled_start_at: scheduledStart || null,
+            due_at: dueAt ? zonedDateTimeToUtcIso(dueAt, timeZone) : null,
+            scheduled_start_at: scheduledStart ? zonedDateTimeToUtcIso(scheduledStart, timeZone) : null,
             description: desc || null, is_recurring: isRecurring, recurrence_rule: recurrenceRule,
           });
           onClose();
@@ -294,6 +301,7 @@ function EditTaskModal({ task, onClose, onSave, members }: {
   );
 }
 export default function Tasks() {
+  const timeZone = usePreferencesStore((s) => s.timeZone);
   const { data: tasks = [], createTask, updateTask, deleteTask, members = [] } = useTasks();
   const { taskBoardView, setTaskBoardView, selectedDate, setSelectedDate } = useUiStore();
   const [showModal, setShowModal] = useState(false);
@@ -381,7 +389,7 @@ export default function Tasks() {
               {task.description && <p className="text-xs text-theme-muted truncate opacity-70">{task.description}</p>}
             </div>
             {task.priority_level && <span className={"text-xs px-2 py-0.5 rounded-full font-medium " + PRIORITY_BADGE[task.priority_level]}>P{task.priority_level}</span>}
-            {task.due_at && <span className="text-xs text-theme-muted hidden sm:block">{new Date(task.due_at).toLocaleDateString("he-IL")}</span>}
+             {task.due_at && <span className="text-xs text-theme-muted hidden sm:block">{formatInTimeZone(task.due_at, timeZone, { year: "numeric", month: "2-digit", day: "2-digit" })}</span>}
             <button onClick={() => setEditingTask(task)} className="text-slate-600 hover:text-accent-400 transition-colors"><Icon name="edit" className="w-3.5 h-3.5" /></button>
             <button onClick={() => setPendingDelete(task.id)} className="text-slate-600 hover:text-red-400 transition-colors"><Icon name="trash" className="w-3.5 h-3.5" /></button>
           </div>
@@ -399,8 +407,8 @@ export default function Tasks() {
     const dayTasksFor = (date: string) =>
       visible.filter((t) => t.task_type === "time_sensitive" && t.scheduled_start_at?.slice(0, 10) === date);
     const dateRangeLabel = nDays === 1
-      ? new Date(selectedDate + "T12:00:00").toLocaleDateString("he-IL", { weekday: "long", month: "long", day: "numeric" })
-      : `${new Date(dates[0] + "T12:00:00").toLocaleDateString("he-IL", { month: "numeric", day: "numeric" })} – ${new Date(dates[dates.length - 1] + "T12:00:00").toLocaleDateString("he-IL", { month: "numeric", day: "numeric" })}`;
+      ? formatInTimeZone(dates[0] + "T12:00:00", timeZone, { weekday: "long", month: "long", day: "numeric" })
+      : `${formatInTimeZone(dates[0] + "T12:00:00", timeZone, { month: "numeric", day: "numeric" })} – ${formatInTimeZone(dates[dates.length - 1] + "T12:00:00", timeZone, { month: "numeric", day: "numeric" })}`;
     return (
       <div>
         {/* Timeline Controls */}
@@ -444,7 +452,7 @@ export default function Tasks() {
                 <div />
                 {dates.map((d) => (
                   <div key={d} className={"text-center text-xs py-2 font-medium rounded-t-lg " +
-                    (d === new Date().toISOString().slice(0,10) ? "text-accent-400" : "text-theme-muted")}>
+                    (d === getTodayInTimeZone(timeZone) ? "text-accent-400" : "text-theme-muted")}>
                     {formatDayHeader(d)}
                   </div>
                 ))}

@@ -4,30 +4,69 @@ import { useInventoryCategories } from "../hooks/useInventoryCategories";
 import Icon from "../components/Icon";
 type Item = Record<string, any>;
 type Category = Record<string, any>;
-function ItemModal({ item, categories, onClose, onSave }: {
-  item?: Item; categories: Category[]; onClose: () => void; onSave: (d: Item) => void;
+const QUICK_CATEGORIES = ["פארם", "שתיה", "תבלינים", "פחמימות"] as const;
+
+function normalizeItemName(name: string): string {
+  return name.trim().toLowerCase().replace(/\s+/g, " ");
+}
+
+function getStockState(item: Item): "low" | "threshold" | "ok" {
+  const qty = Number(item.quantity);
+  const threshold = Number(item.critical_threshold);
+  if (qty < threshold) return "low";
+  if (qty === threshold) return "threshold";
+  return "ok";
+}
+
+function ItemModal({ item, defaultCategoryId, categories, existingNames, onClose, onSave }: {
+  item?: Item;
+  defaultCategoryId?: string | null;
+  categories: Category[];
+  existingNames: Set<string>;
+  onClose: () => void;
+  onSave: (d: Item) => void;
 }) {
   const [name, setName] = useState(item?.name ?? "");
   const [unit, setUnit] = useState(item?.unit ?? "יחידות");
   const [qty, setQty] = useState(String(item?.quantity ?? 0));
   const [thr, setThr] = useState(String(item?.critical_threshold ?? 1));
   const [auto, setAuto] = useState<boolean>(item?.auto_restock_task ?? true);
-  const [catId, setCatId] = useState(item?.category_id ?? "");
+  const [catId, setCatId] = useState(item?.category_id ?? defaultCategoryId ?? "");
   const [notes, setNotes] = useState(item?.notes ?? "");
+  const [dupError, setDupError] = useState("");
+  const normalizedName = normalizeItemName(name);
+  const canSave = !!normalizedName && !existingNames.has(normalizedName);
   return (
     <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
       <form onSubmit={(e) => {
         e.preventDefault();
+        if (!canSave) {
+          setDupError("כבר קיים פריט בשם הזה.");
+          return;
+        }
         onSave({ ...(item?.id ? { id: item.id } : {}), name, unit, quantity: Number(qty), critical_threshold: Number(thr), auto_restock_task: auto, category_id: catId || null, notes: notes || null });
         onClose();
       }} className="bg-slate-900 border border-slate-700 rounded-2xl p-5 w-full max-w-sm space-y-4">
         <div className="flex items-center justify-between">
-          <h3 className="font-semibold text-theme">{item ? "עריכת פריט" : "הוסף פריט"}</h3>
+          <h3 className="font-semibold text-theme">{item?.id ? "עריכת פריט" : "הוסף פריט"}</h3>
           <button type="button" onClick={onClose} className="text-theme-muted hover:text-theme"><Icon name="x" className="w-4 h-4" /></button>
         </div>
         <div>
           <label className="text-xs text-theme-muted block mb-1">שם *</label>
-          <input required value={name} onChange={(e)=>setName(e.target.value)} className="input-base w-full" placeholder="חיתולים" />
+          <input
+            required
+            value={name}
+            onChange={(e) => {
+              setName(e.target.value);
+              if (dupError) setDupError("");
+            }}
+            className="input-base w-full"
+            placeholder="חיתולים"
+          />
+          {dupError && <p className="text-xs text-red-400 mt-1">{dupError}</p>}
+          {!dupError && normalizedName && existingNames.has(normalizedName) && (
+            <p className="text-xs text-red-400 mt-1">כבר קיים פריט בשם הזה.</p>
+          )}
         </div>
         <div>
           <label className="text-xs text-theme-muted block mb-1">קטגוריה</label>
@@ -53,15 +92,20 @@ function ItemModal({ item, categories, onClose, onSave }: {
         </label>
         <div><label className="text-xs text-theme-muted block mb-1">הערות</label>
           <input value={notes} onChange={(e)=>setNotes(e.target.value)} className="input-base w-full" placeholder="אופציונלי" /></div>
-        <button type="submit" className="w-full bg-accent-600 hover:bg-accent-500 text-white font-medium py-2 rounded-lg text-sm">
-          {item ? "שמור" : "הוסף פריט"}
+        <button
+          type="submit"
+          disabled={!canSave}
+          className="w-full bg-accent-600 hover:bg-accent-500 disabled:opacity-50 text-white font-medium py-2 rounded-lg text-sm"
+        >
+          {item?.id ? "שמור" : "הוסף פריט"}
         </button>
       </form>
     </div>
   );
 }
-function ItemRow({ item, onEdit, onDelete, onUpdate }: {
+function ItemRow({ item, onEdit, onDelete, onUpdate, categoryName }: {
   item: Item; onEdit: (i: Item) => void; onDelete: (i: Item) => void; onUpdate: (i: Item) => void;
+  categoryName?: string;
 }) {
   const [editingQty, setEditingQty] = useState(false);
   const [localQty, setLocalQty] = useState(Number(item.quantity));
@@ -79,6 +123,12 @@ function ItemRow({ item, onEdit, onDelete, onUpdate }: {
         <span className={"text-sm font-medium " + (low ? "text-red-300" : "text-theme")}>{item.name}</span>
         {low && <span className="text-xs text-red-400 mr-1.5">מלאי נמוך</span>}
       </div>
+      {/* Category badge – shown only in flat view */}
+      {categoryName !== undefined && (
+        <span className="hidden sm:inline-flex items-center text-xs px-2 py-0.5 rounded-full bg-slate-800 text-theme-muted border border-slate-700 shrink-0 max-w-[8rem] truncate">
+          {categoryName}
+        </span>
+      )}
       {/* Quantity controls */}
       <div className="flex items-center gap-1">
         <button onClick={() => changeQty(localQty - 1)}
@@ -115,18 +165,78 @@ function ItemRow({ item, onEdit, onDelete, onUpdate }: {
     </div>
   );
 }
+function InlineAddTrigger({
+  categoryId,
+  onOpen,
+}: {
+  categoryId: string | null;
+  onOpen: (categoryId: string | null) => void;
+}) {
+  return (
+    <div className="px-3 py-2 border-t border-slate-800 bg-slate-900/50 flex justify-end">
+      <button
+        type="button"
+        onClick={() => onOpen(categoryId)}
+        className="bg-accent-600 hover:bg-accent-500 text-white text-xs px-2.5 py-1.5 rounded-lg flex items-center gap-1"
+        title="הוסף פריט"
+      >
+        <Icon name="plus" className="w-3.5 h-3.5" />
+        הוספה
+      </button>
+    </div>
+  );
+}
 export default function Inventory() {
   const { data: items = [], upsertItem, deleteItem } = useInventory();
   const { data: categories = [], addCategory, deleteCategory } = useInventoryCategories();
-  const [modal, setModal] = useState<{ open: boolean; item?: Item }>({ open: false });
+  const [modal, setModal] = useState<{ open: boolean; item?: Item; defaultCategoryId?: string | null }>({ open: false });
   const [pendingDelete, setPendingDelete] = useState<Item | null>(null);
   const [pendingDeleteCat, setPendingDeleteCat] = useState<Category | null>(null);
   const [search, setSearch] = useState("");
   const [showCatMgmt, setShowCatMgmt] = useState(false);
   const [newCatName, setNewCatName] = useState("");
   const [collapsedCats, setCollapsedCats] = useState<Set<string>>(new Set());
-  const filtered = items.filter((i) => i.name.toLowerCase().includes(search.toLowerCase()));
-  const lowStock = filtered.filter((i) => Number(i.quantity) < Number(i.critical_threshold));
+  const [stockFilter, setStockFilter] = useState<"all" | "low" | "threshold">("all");
+  const [sortMode, setSortMode] = useState<"name" | "low_first" | "threshold_first">("name");
+  const [viewMode, setViewMode] = useState<"grouped" | "flat">("grouped");
+  const [saveError, setSaveError] = useState("");
+
+  const normalizedSearch = search.trim().toLowerCase();
+  const editingItemId = modal.item?.id;
+  const existingNames = new Set(
+    items
+      .filter((i) => !editingItemId || i.id !== editingItemId)
+      .map((i) => normalizeItemName(String(i.name ?? "")))
+  );
+
+  const applyStockFilter = (item: Item) => {
+    const state = getStockState(item);
+    if (stockFilter === "all") return true;
+    if (stockFilter === "low") return state === "low";
+    return state === "threshold";
+  };
+
+  const sortItems = (a: Item, b: Item) => {
+    if (sortMode === "name") {
+      return String(a.name ?? "").localeCompare(String(b.name ?? ""), "he");
+    }
+    if (sortMode === "low_first") {
+      const rank = { low: 0, threshold: 1, ok: 2 } as const;
+      const diff = rank[getStockState(a)] - rank[getStockState(b)];
+      return diff !== 0 ? diff : String(a.name ?? "").localeCompare(String(b.name ?? ""), "he");
+    }
+    const rank = { threshold: 0, low: 1, ok: 2 } as const;
+    const diff = rank[getStockState(a)] - rank[getStockState(b)];
+    return diff !== 0 ? diff : String(a.name ?? "").localeCompare(String(b.name ?? ""), "he");
+  };
+
+  const filtered = items
+    .filter((i) => String(i.name ?? "").toLowerCase().includes(normalizedSearch))
+    .filter(applyStockFilter)
+    .sort(sortItems);
+
+  const lowStock = items.filter((i) => getStockState(i) === "low");
+
   // Group items by category
   const grouped: { cat: Category | null; items: Item[] }[] = [];
   categories.forEach((cat) => {
@@ -135,6 +245,7 @@ export default function Inventory() {
   });
   const uncategorized = filtered.filter((i) => !i.category_id);
   if (uncategorized.length > 0) grouped.push({ cat: null, items: uncategorized });
+  const isSearchActive = normalizedSearch.length > 0;
   const toggleCollapse = (catId: string) => {
     setCollapsedCats((prev) => {
       const next = new Set(prev);
@@ -142,6 +253,26 @@ export default function Inventory() {
       return next;
     });
   };
+  const saveItem = (data: Item) => {
+    setSaveError("");
+    upsertItem.mutate(data, {
+      onError: (err: unknown) => {
+        const msg = err && typeof err === "object" && "message" in err ? String((err as { message?: string }).message) : "שגיאה בשמירת פריט";
+        if (msg.toLowerCase().includes("duplicate") || msg.includes("unique")) {
+          setSaveError("לא ניתן לשמור פריט פעמיים. השם כבר קיים.");
+          return;
+        }
+        setSaveError(msg);
+      },
+    });
+  };
+  const addQuickCategories = () => {
+    const existing = new Set(categories.map((c) => String(c.name ?? "").trim()));
+    QUICK_CATEGORIES.forEach((name) => {
+      if (!existing.has(name)) addCategory.mutate(name);
+    });
+  };
+
   return (
     <div>
       <div className="flex items-center justify-between mb-5">
@@ -152,6 +283,13 @@ export default function Inventory() {
           </p>
         </div>
         <div className="flex gap-2">
+          <button
+            onClick={() => setViewMode((prev) => prev === "grouped" ? "flat" : "grouped")}
+            className="text-sm font-medium px-3 py-2 rounded-lg bg-slate-900 border border-slate-800 text-theme-muted hover:text-theme flex items-center gap-1.5"
+          >
+            <Icon name={viewMode === "grouped" ? "layers" : "grid"} className="w-3.5 h-3.5" />
+            {viewMode === "grouped" ? "תצוגה מלאה" : "לפי קטגוריות"}
+          </button>
           <button onClick={() => setShowCatMgmt(!showCatMgmt)}
             className={"text-sm font-medium px-3 py-2 rounded-lg transition-colors flex items-center gap-1.5 " +
               (showCatMgmt ? "bg-accent-700 text-white" : "bg-slate-900 border border-slate-800 text-theme-muted hover:text-theme")}>
@@ -189,19 +327,43 @@ export default function Inventory() {
               className="bg-accent-600 hover:bg-accent-500 disabled:opacity-40 text-white text-sm px-3 py-2 rounded-lg flex items-center gap-1.5">
               <Icon name="plus" className="w-3.5 h-3.5" /> הוסף
             </button>
+            <button
+              type="button"
+              onClick={addQuickCategories}
+              className="bg-slate-800 hover:bg-slate-700 text-theme text-sm px-3 py-2 rounded-lg"
+            >
+              הוספת ברירת מחדל
+            </button>
           </div>
+          <p className="text-xs text-theme-muted mt-2 opacity-75">ברירת מחדל: {QUICK_CATEGORIES.join(" · ")}</p>
         </div>
       )}
-      <div className="relative max-w-xs mb-5">
-        <Icon name="search" className="w-4 h-4 absolute right-3 top-1/2 -translate-y-1/2 text-theme-muted pointer-events-none" />
-        <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="חפש פריטים..." className="input-base w-full pr-9" />
+      <div className="flex flex-wrap gap-2 mb-5">
+        <div className="relative min-w-60 flex-1 max-w-sm">
+          <Icon name="search" className="w-4 h-4 absolute right-3 top-1/2 -translate-y-1/2 text-theme-muted pointer-events-none" />
+          <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="חפש פריטים..." className="input-base w-full pr-9" />
+        </div>
+        <select value={stockFilter} onChange={(e) => setStockFilter(e.target.value as "all" | "low" | "threshold")} className="input-base text-sm">
+          <option value="all">כל הפריטים</option>
+          <option value="low">מלאי נמוך</option>
+          <option value="threshold">על הסף</option>
+        </select>
+        <select value={sortMode} onChange={(e) => setSortMode(e.target.value as "name" | "low_first" | "threshold_first")} className="input-base text-sm">
+          <option value="name">מיון לפי שם</option>
+          <option value="low_first">נמוך קודם</option>
+          <option value="threshold_first">על הסף קודם</option>
+        </select>
       </div>
+      {saveError && (
+        <div className="mb-4 text-xs text-red-300 bg-red-950/40 border border-red-800 rounded-lg px-3 py-2">{saveError}</div>
+      )}
       {filtered.length === 0 && <div className="text-center py-16 text-theme-muted">אין פריטים עדיין. הוסף את הראשון.</div>}
-      {/* Grouped rows */}
-      {grouped.map(({ cat, items: groupItems }) => {
+      {viewMode === "grouped" && grouped.map(({ cat, items: groupItems }) => {
         const catKey = cat?.id ?? "__uncategorized__";
-        const collapsed = collapsedCats.has(catKey);
-        const groupLow = groupItems.filter((i) => Number(i.quantity) < Number(i.critical_threshold)).length;
+        const forceOpen = isSearchActive && groupItems.length > 0;
+        const collapsed = forceOpen ? false : collapsedCats.has(catKey);
+        const groupLow = groupItems.filter((i) => getStockState(i) === "low").length;
+        const groupThreshold = groupItems.filter((i) => getStockState(i) === "threshold").length;
         return (
           <div key={catKey} className="mb-3">
             <button
@@ -211,6 +373,7 @@ export default function Inventory() {
               <span className="text-sm font-semibold text-theme">{cat?.name ?? "ללא קטגוריה"}</span>
               <span className="text-xs text-theme-muted">({groupItems.length} פריטים)</span>
               {groupLow > 0 && <span className="text-xs text-red-400 mr-1">{groupLow} מלאי נמוך</span>}
+              {groupThreshold > 0 && <span className="text-xs text-amber-400">{groupThreshold} על הסף</span>}
             </button>
             {!collapsed && (
               <div className="border border-t-0 border-slate-800 rounded-b-xl overflow-hidden">
@@ -220,13 +383,50 @@ export default function Inventory() {
                     onDelete={(i) => setPendingDelete(i)}
                     onUpdate={(updated) => upsertItem.mutate(updated)} />
                 ))}
+                <InlineAddTrigger
+                  categoryId={cat?.id ?? null}
+                  onOpen={(categoryId) => setModal({ open: true, defaultCategoryId: categoryId })}
+                />
               </div>
             )}
           </div>
         );
       })}
+      {viewMode === "flat" && filtered.length > 0 && (
+        <div className="border border-slate-800 rounded-xl overflow-hidden">
+          {/* Header row */}
+          <div className="flex items-center gap-2 px-3 py-2 bg-slate-900 border-b border-slate-800 text-xs text-theme-muted font-semibold select-none">
+            <span className="flex-1">שם פריט</span>
+            <span className="hidden sm:block w-32 text-center">קטגוריה</span>
+            <span className="w-32 text-center">כמות</span>
+            <span className="hidden sm:block w-20 text-center">סף</span>
+            <span className="w-2" />
+            <span className="w-12" />
+          </div>
+          {filtered.map((item) => {
+            const cat = categories.find((c) => c.id === item.category_id);
+            return (
+              <ItemRow
+                key={item.id}
+                item={item}
+                categoryName={cat?.name ?? "ללא קטגוריה"}
+                onEdit={(i) => setModal({ open: true, item: i })}
+                onDelete={(i) => setPendingDelete(i)}
+                onUpdate={(updated) => upsertItem.mutate(updated)}
+              />
+            );
+          })}
+        </div>
+      )}
       {modal.open && (
-        <ItemModal item={modal.item} categories={categories} onClose={() => setModal({ open: false })} onSave={(data) => upsertItem.mutate(data)} />
+        <ItemModal
+          item={modal.item}
+          defaultCategoryId={modal.defaultCategoryId}
+          categories={categories}
+          existingNames={existingNames}
+          onClose={() => setModal({ open: false })}
+          onSave={saveItem}
+        />
       )}
       {/* Delete item confirm */}
       {pendingDelete && (

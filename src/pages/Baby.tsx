@@ -2,6 +2,16 @@ import { useState, useMemo } from "react";
 import { useChildren, useBabyLogs, useAppointments } from "../hooks/useBaby";
 import Icon from "../components/Icon";
 import AppCalendar from "../components/AppCalendar";
+import { usePreferencesStore } from "../state/stores/preferencesStore";
+import {
+  dateToIsoInTimeZone,
+  formatInTimeZone,
+  getNowInTimeZoneInput,
+  getTodayInTimeZone,
+  utcIsoToDateInput,
+  utcIsoToDateTimeInput,
+  zonedDateTimeToUtcIso,
+} from "../lib/datetime";
 
 type Row = Record<string, any>;
 
@@ -14,10 +24,8 @@ function formatMinutes(mins: number) {
 }
 
 /** Returns current local time as "YYYY-MM-DDTHH:mm" (for datetime-local / AppCalendar) */
-function nowLocal(): string {
-  const now = new Date();
-  const p = (n: number) => String(n).padStart(2, "0");
-  return `${now.getFullYear()}-${p(now.getMonth() + 1)}-${p(now.getDate())}T${p(now.getHours())}:${p(now.getMinutes())}`;
+function nowLocal(timeZone: string): string {
+  return getNowInTimeZoneInput(timeZone);
 }
 
 const LOG_LABELS: Record<string, string> = {
@@ -55,12 +63,16 @@ function AddLogModal({ logType, lastAmount, onClose, onSave }: {
   onClose: () => void;
   onSave: (log: Row) => void;
 }) {
-  const [eventAt, setEventAt] = useState(nowLocal());
+  const timeZone = usePreferencesStore((s) => s.timeZone);
+  const [eventAt, setEventAt] = useState(nowLocal(timeZone));
   const [amount, setAmount] = useState(lastAmount ?? 120);
   const [tummyMinutes, setTummyMinutes] = useState(10);
   const [diaperTypes, setDiaperTypes] = useState<string[]>(["pee"]);
-  const [sleepStart, setSleepStart] = useState(nowLocal());
+  const [sleepStart, setSleepStart] = useState(nowLocal(timeZone));
   const [notes, setNotes] = useState("");
+
+  const currentDate = (logType === "sleep" ? sleepStart : eventAt).slice(0, 10);
+  const currentTime = (logType === "sleep" ? sleepStart : eventAt).slice(11, 16);
 
   const toggleDiaper = (id: string) => {
     setDiaperTypes(prev => prev.includes(id) ? prev.filter(t => t !== id) : [...prev, id]);
@@ -68,14 +80,14 @@ function AddLogModal({ logType, lastAmount, onClose, onSave }: {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    const base: Row = { event_at: new Date(eventAt).toISOString(), notes: notes || null };
+    const base: Row = { event_at: zonedDateTimeToUtcIso(eventAt, timeZone), notes: notes || null };
 
     if (logType === "feeding") {
       onSave({ ...base, log_type: "feeding", amount, unit: "מ״ל" });
     } else if (logType === "diaper_change") {
       onSave({ ...base, log_type: "diaper_change", notes: diaperTypes.join(", ") + (notes ? ` | ${notes}` : "") });
     } else if (logType === "sleep") {
-      onSave({ ...base, log_type: "sleep", event_at: new Date(sleepStart).toISOString(), notes: notes || "התחלת שינה" });
+      onSave({ ...base, log_type: "sleep", event_at: zonedDateTimeToUtcIso(sleepStart, timeZone), notes: notes || "התחלת שינה" });
     } else if (logType === "tummy_time") {
       onSave({ ...base, log_type: "tummy_time", amount: tummyMinutes, unit: "דקות" });
     } else {
@@ -93,14 +105,30 @@ function AddLogModal({ logType, lastAmount, onClose, onSave }: {
           <button type="button" onClick={onClose} className="text-theme-muted hover:text-theme"><Icon name="x" className="w-4 h-4" /></button>
         </div>
 
-        {/* Time */}
-        <AppCalendar
-          mode="datetime"
-          value={logType === "sleep" ? sleepStart : eventAt}
-          onChange={logType === "sleep" ? setSleepStart : setEventAt}
-          label={logType === "sleep" ? "שעת תחילת שינה" : "שעת האירוע"}
-          inline
-        />
+        {/* Date + time split is easier to edit than combined datetime picker */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+          <AppCalendar
+            mode="date"
+            value={currentDate}
+            onChange={(date) => {
+              const next = `${date}T${currentTime || "09:00"}`;
+              if (logType === "sleep") setSleepStart(next); else setEventAt(next);
+            }}
+            label="תאריך"
+          />
+          <div>
+            <label className="text-xs text-theme-muted block mb-1">שעה</label>
+            <input
+              type="time"
+              value={currentTime}
+              onChange={(e) => {
+                const next = `${currentDate || getTodayInTimeZone(timeZone)}T${e.target.value}`;
+                if (logType === "sleep") setSleepStart(next); else setEventAt(next);
+              }}
+              className="input-base w-full"
+            />
+          </div>
+        </div>
 
         {/* Feeding amount */}
         {logType === "feeding" && (
@@ -174,13 +202,8 @@ function AddLogModal({ logType, lastAmount, onClose, onSave }: {
 
 /* ─── Edit Log Modal ─── */
 function EditLogModal({ log, onClose, onSave }: { log: Row; onClose: () => void; onSave: (l: Row) => void }) {
-  // Convert stored UTC ISO to local datetime string
-  const toLocalDT = (iso: string) => {
-    const d = new Date(iso);
-    const p = (n: number) => String(n).padStart(2, "0");
-    return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`;
-  };
-  const [eventAt, setEventAt] = useState(log.event_at ? toLocalDT(log.event_at) : nowLocal());
+  const timeZone = usePreferencesStore((s) => s.timeZone);
+  const [eventAt, setEventAt] = useState(log.event_at ? utcIsoToDateTimeInput(log.event_at, timeZone) : nowLocal(timeZone));
   const [amount, setAmount] = useState(log.amount ?? 0);
   const [notes, setNotes] = useState(log.notes ?? "");
   const isTummy = log.log_type === "tummy_time";
@@ -189,7 +212,7 @@ function EditLogModal({ log, onClose, onSave }: { log: Row; onClose: () => void;
     <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
       <form onSubmit={e => {
         e.preventDefault();
-        onSave({ id: log.id, event_at: new Date(eventAt).toISOString(), amount: (log.log_type === "feeding" || isTummy) ? amount : log.amount, notes: notes || null });
+        onSave({ id: log.id, event_at: zonedDateTimeToUtcIso(eventAt, timeZone), amount: (log.log_type === "feeding" || isTummy) ? amount : log.amount, notes: notes || null });
         onClose();
       }}
         className="bg-slate-900 border border-slate-700 rounded-2xl p-5 w-full max-w-sm space-y-4 overflow-y-auto max-h-[92dvh]">
@@ -247,8 +270,9 @@ function EditLogModal({ log, onClose, onSave }: { log: Row; onClose: () => void;
 
 /* ─── Add Event Modal ─── */
 function AddEventModal({ children, onClose, onSave }: { children: Row[]; onClose: () => void; onSave: (a: Row) => void }) {
+  const timeZone = usePreferencesStore((s) => s.timeZone);
   const [title, setTitle] = useState("");
-  const [startsAt, setStartsAt] = useState("");
+  const [startsAt, setStartsAt] = useState(nowLocal(timeZone));
   const [childId, setChildId] = useState(children[0]?.id ?? "");
   const [provider, setProvider] = useState("");
   const [loc, setLoc] = useState("");
@@ -256,7 +280,7 @@ function AddEventModal({ children, onClose, onSave }: { children: Row[]; onClose
     <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
       <form onSubmit={e => {
         e.preventDefault();
-        onSave({ title, starts_at: startsAt ? new Date(startsAt).toISOString() : null, child_id: childId || null, provider_name: provider || null, location: loc || null, status: "scheduled" });
+        onSave({ title, starts_at: startsAt ? zonedDateTimeToUtcIso(startsAt, timeZone) : null, child_id: childId || null, provider_name: provider || null, location: loc || null, status: "scheduled" });
         onClose();
       }}
         className="bg-slate-900 border border-slate-700 rounded-2xl p-5 w-full max-w-sm space-y-4 overflow-y-auto max-h-[92dvh]">
@@ -294,13 +318,9 @@ function AddEventModal({ children, onClose, onSave }: { children: Row[]; onClose
 
 /* ─── Edit Event Modal ─── */
 function EditEventModal({ event, children, onClose, onSave }: { event: Row; children: Row[]; onClose: () => void; onSave: (a: Row) => void }) {
-  const toLocalDT = (iso: string) => {
-    const d = new Date(iso);
-    const p = (n: number) => String(n).padStart(2, "0");
-    return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`;
-  };
+  const timeZone = usePreferencesStore((s) => s.timeZone);
   const [title, setTitle] = useState(event.title ?? "");
-  const [startsAt, setStartsAt] = useState(event.starts_at ? toLocalDT(event.starts_at) : "");
+  const [startsAt, setStartsAt] = useState(event.starts_at ? utcIsoToDateTimeInput(event.starts_at, timeZone) : nowLocal(timeZone));
   const [childId, setChildId] = useState(event.child_id ?? "");
   const [provider, setProvider] = useState(event.provider_name ?? "");
   const [loc, setLoc] = useState(event.location ?? "");
@@ -308,7 +328,7 @@ function EditEventModal({ event, children, onClose, onSave }: { event: Row; chil
     <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
       <form onSubmit={e => {
         e.preventDefault();
-        onSave({ id: event.id, title, starts_at: startsAt ? new Date(startsAt).toISOString() : null, child_id: childId || null, provider_name: provider || null, location: loc || null });
+        onSave({ id: event.id, title, starts_at: startsAt ? zonedDateTimeToUtcIso(startsAt, timeZone) : null, child_id: childId || null, provider_name: provider || null, location: loc || null });
         onClose();
       }}
         className="bg-slate-900 border border-slate-700 rounded-2xl p-5 w-full max-w-sm space-y-4 overflow-y-auto max-h-[92dvh]">
@@ -345,14 +365,15 @@ function EditEventModal({ event, children, onClose, onSave }: { event: Row; chil
 }
 
 /* ─── Simple Daily Charts ─── */
-function DailyCharts({ logs, days = 7 }: { logs: Row[]; days?: number }) {
+function DailyCharts({ logs, days = 7, timeZone }: { logs: Row[]; days?: number; timeZone: string }) {
   const chartData = useMemo(() => {
     const result: { date: string; feedings: number; ml: number; diapers: number; sleeps: number; tummyTime: number }[] = [];
+    const today = new Date(getTodayInTimeZone(timeZone) + "T12:00:00");
     for (let i = days - 1; i >= 0; i--) {
-      const d = new Date();
-      d.setDate(d.getDate() - i);
-      const dateStr = d.toISOString().slice(0, 10);
-      const dayLogs = logs.filter(l => l.event_at?.slice(0, 10) === dateStr);
+      const d = new Date(today);
+      d.setDate(today.getDate() - i);
+      const dateStr = dateToIsoInTimeZone(d, timeZone);
+      const dayLogs = logs.filter((l) => l.event_at && utcIsoToDateInput(l.event_at, timeZone) === dateStr);
       result.push({
         date: dateStr,
         feedings: dayLogs.filter(l => l.log_type === "feeding").length,
@@ -363,7 +384,7 @@ function DailyCharts({ logs, days = 7 }: { logs: Row[]; days?: number }) {
       });
     }
     return result;
-  }, [logs, days]);
+  }, [logs, days, timeZone]);
 
   const maxMl = Math.max(...chartData.map(d => d.ml), 1);
   const maxTummy = Math.max(...chartData.map(d => d.tummyTime), 1);
@@ -433,6 +454,7 @@ function DailyCharts({ logs, days = 7 }: { logs: Row[]; days?: number }) {
 
 /* ─── Main Baby Component ─── */
 export default function Baby() {
+  const timeZone = usePreferencesStore((s) => s.timeZone);
   const { data: children = [] } = useChildren();
   const [activeChild, setActiveChild] = useState<string>("");
   const cid = activeChild || children[0]?.id;
@@ -444,9 +466,9 @@ export default function Baby() {
   const [editingEvent, setEditingEvent] = useState<Row | null>(null);
   const [addLogType, setAddLogType] = useState<string | null>(null);
   const [editingLog, setEditingLog] = useState<Row | null>(null);
-  const [selectedDate, setSelectedDate] = useState(new Date().toISOString().slice(0, 10));
+  const [selectedDate, setSelectedDate] = useState(getTodayInTimeZone(timeZone));
 
-  const dateLogs = logs.filter(l => l.event_at?.slice(0, 10) === selectedDate);
+  const dateLogs = logs.filter((l) => l.event_at && utcIsoToDateInput(l.event_at, timeZone) === selectedDate);
   const feedings = dateLogs.filter(l => l.log_type === "feeding");
   const totalMl = feedings.reduce((s, f) => s + (f.amount ?? 0), 0);
   const tummyTimeLogs = dateLogs.filter(l => l.log_type === "tummy_time");
@@ -458,7 +480,8 @@ export default function Baby() {
     setSelectedDate(d.toISOString().slice(0, 10));
   };
 
-  const isToday = selectedDate === new Date().toISOString().slice(0, 10);
+  const today = getTodayInTimeZone(timeZone);
+  const isToday = selectedDate === today;
 
   const lastFeedingAmount = useMemo(() => {
     const lastFeeding = logs.find(l => l.log_type === "feeding" && l.amount);
@@ -523,7 +546,7 @@ export default function Baby() {
             <AppCalendar value={selectedDate} onChange={setSelectedDate} placeholder="בחר תאריך" />
           </div>
           {!isToday && (
-            <button onClick={() => setSelectedDate(new Date().toISOString().slice(0, 10))}
+            <button onClick={() => setSelectedDate(today)}
               className="text-xs text-accent-400 hover:text-accent-300 font-medium shrink-0">
               היום
             </button>
@@ -597,7 +620,7 @@ export default function Baby() {
                       )}
                       {log.notes && <div className="text-xs text-theme-muted opacity-70 truncate">{log.notes}</div>}
                     </div>
-                    <span className="text-xs text-theme-muted shrink-0">{new Date(log.event_at).toLocaleTimeString("he-IL", { hour: "2-digit", minute: "2-digit" })}</span>
+                    <span className="text-xs text-theme-muted shrink-0">{formatInTimeZone(log.event_at, timeZone, { hour: "2-digit", minute: "2-digit" })}</span>
                     <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                       <button onClick={() => setEditingLog(log)} className="text-theme-muted hover:text-accent-400">
                         <Icon name="edit" className="w-3.5 h-3.5" />
@@ -615,7 +638,7 @@ export default function Baby() {
 
           {/* ─── Charts Tab ─── */}
           {tab === "charts" && (
-            <DailyCharts logs={logs} days={7} />
+            <DailyCharts logs={logs} days={7} timeZone={timeZone} />
           )}
 
           {/* ─── Events Tab ─── */}
@@ -625,8 +648,8 @@ export default function Baby() {
               {appointments.map(appt => (
                 <div key={appt.id} className="bg-slate-900 border border-slate-800 rounded-xl px-4 py-3 flex items-start gap-4 group">
                   <div className="text-center shrink-0">
-                    <div className="text-sm font-bold text-accent-400">{new Date(appt.starts_at).toLocaleDateString("he-IL", { month: "short", day: "numeric" })}</div>
-                    <div className="text-xs text-theme-muted">{new Date(appt.starts_at).toLocaleTimeString("he-IL", { hour: "2-digit", minute: "2-digit" })}</div>
+                    <div className="text-sm font-bold text-accent-400">{formatInTimeZone(appt.starts_at, timeZone, { month: "short", day: "numeric" })}</div>
+                    <div className="text-xs text-theme-muted">{formatInTimeZone(appt.starts_at, timeZone, { hour: "2-digit", minute: "2-digit" })}</div>
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="font-medium text-sm text-theme truncate">{appt.title}</div>

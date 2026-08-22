@@ -8,6 +8,7 @@ import AppCalendar from "../components/AppCalendar";
 import { supabase } from "../lib/supabase";
 import { useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "../contexts/AuthContext";
+import { TIMEZONE_OPTIONS, usePreferencesStore } from "../state/stores/preferencesStore";
 
 export default function Settings() {
   const {
@@ -30,6 +31,7 @@ export default function Settings() {
     applyPalette,
     removePalette,
   } = useThemeStore();
+  const { timeZone, setTimeZone } = usePreferencesStore();
   const { user } = useAuth();
   const qc = useQueryClient();
   const { data: profile } = useProfile();
@@ -86,6 +88,7 @@ export default function Settings() {
   const [changeLoading, setChangeLoading] = useState(false);
   const [changeError, setChangeError] = useState("");
   const [changeSuccess, setChangeSuccess] = useState(false);
+  const [customTimeZone, setCustomTimeZone] = useState("");
 
   const handleChangeHousehold = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -322,6 +325,43 @@ export default function Settings() {
                 <button onClick={() => setEditingName(true)} className="text-theme-muted hover:text-accent-400"><Icon name="edit" className="w-3.5 h-3.5" /></button>
               </div>
             )}
+          </div>
+
+          <div className="py-2 border-b border-slate-800">
+            <label className="text-sm text-theme-muted block mb-1">אזור זמן לאפליקציה</label>
+            <p className="text-xs text-theme-muted opacity-80 mb-2">
+              אזור זמן משפיע על כל ממשקי השעה והתאריכים. ברירת המחדל היא ישראל.
+            </p>
+            <select
+              value={timeZone}
+              onChange={(e) => setTimeZone(e.target.value)}
+              className="input-base w-full text-sm"
+            >
+              {TIMEZONE_OPTIONS.map((tz) => (
+                <option key={tz.value} value={tz.value}>{tz.label}</option>
+              ))}
+            </select>
+            <div className="flex gap-2 mt-2">
+              <input
+                value={customTimeZone}
+                onChange={(e) => setCustomTimeZone(e.target.value)}
+                placeholder="לדוגמה: Asia/Jerusalem"
+                className="input-base flex-1 text-xs"
+              />
+              <button
+                type="button"
+                onClick={() => {
+                  if (customTimeZone.trim()) {
+                    setTimeZone(customTimeZone.trim());
+                    setCustomTimeZone("");
+                  }
+                }}
+                className="text-xs px-3 py-2 rounded-lg bg-slate-800 text-theme-muted hover:bg-slate-700"
+              >
+                החל מותאם
+              </button>
+            </div>
+            <p className="text-[11px] text-theme-muted mt-1 opacity-70">הגדרה נוכחית: {timeZone}</p>
           </div>
         </div>
       </section>

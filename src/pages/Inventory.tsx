@@ -277,9 +277,9 @@ export default function Inventory() {
     <div>
       <div className="flex items-center justify-between mb-5">
         <div>
-          <h2 className="text-2xl font-bold text-theme">מלאי</h2>
+          <h2 className="text-2xl font-bold text-theme">קניות ומלאי</h2>
           <p className="text-theme-muted text-sm mt-0.5">
-            {items.length} פריטים · <span className="text-red-400">{lowStock.length} מלאי נמוך</span>
+            {items.length} מוצרים במעקב · <span className="text-red-400">{lowStock.length} חסרים לקנייה</span>
           </p>
         </div>
         <div className="flex gap-2">
@@ -297,7 +297,35 @@ export default function Inventory() {
           </button>
           <button onClick={() => setModal({ open: true })}
             className="bg-accent-600 hover:bg-accent-500 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors flex items-center gap-1.5">
-            <Icon name="plus" className="w-3.5 h-3.5" /> הוסף פריט
+            <Icon name="plus" className="w-3.5 h-3.5" /> הוסף מוצר
+          </button>
+        </div>
+      </div>
+      <div className="mb-5 rounded-2xl border border-slate-800 bg-slate-900 px-4 py-4 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+        <div>
+          <h3 className="text-sm font-semibold text-theme">רשימת הקניות של הבית</h3>
+          <p className="text-xs text-theme-muted mt-1">כאן מרכזים חוסרים ומוצרים לקנייה, כדי לא להעמיס על מסך המשימות הרגיל.</p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={() => setStockFilter("low")}
+            className={"px-3 py-1.5 rounded-lg text-xs font-medium transition-colors border " +
+              (stockFilter === "low"
+                ? "bg-red-700 border-red-600 text-white"
+                : "bg-slate-800 border-slate-700 text-theme-muted hover:text-theme")}
+          >
+            לקניות עכשיו
+          </button>
+          <button
+            type="button"
+            onClick={() => setStockFilter("all")}
+            className={"px-3 py-1.5 rounded-lg text-xs font-medium transition-colors border " +
+              (stockFilter === "all"
+                ? "bg-accent-700 border-accent-600 text-white"
+                : "bg-slate-800 border-slate-700 text-theme-muted hover:text-theme")}
+          >
+            כל המוצרים
           </button>
         </div>
       </div>

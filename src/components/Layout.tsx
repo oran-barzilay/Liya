@@ -6,9 +6,9 @@ import { useThemeStore, getContrastColor } from "../state/stores/themeStore";
 import Icon from "./Icon";
 
 const NAV_ITEMS = [
-  { to: "/",         icon: "home"     as const, label: "בקרה"    },
+  { to: "/",         icon: "home"     as const, label: "היום"     },
   { to: "/tasks",    icon: "tasks"    as const, label: "משימות"  },
-  { to: "/inventory",icon: "inventory"as const, label: "מלאי"    },
+  { to: "/inventory",icon: "inventory"as const, label: "קניות"   },
   { to: "/baby",     icon: "babies"   as const, label: "תינוקות" },
   { to: "/finance",  icon: "finance"  as const, label: "כספים"   },
 ] as const;

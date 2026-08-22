@@ -13,7 +13,7 @@ interface UiState {
 
 export const useUiStore = create<UiState>((set) => ({
   selectedDate: new Date().toISOString().slice(0, 10),
-  taskBoardView: "kanban",
+  taskBoardView: "list",
   showCompletedTasks: false,
   setSelectedDate: (selectedDate) => set({ selectedDate }),
   setTaskBoardView: (taskBoardView) => set({ taskBoardView }),

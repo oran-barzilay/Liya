@@ -1,4 +1,5 @@
-import { useState, useRef } from "react";
+import { useMemo, useRef, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { useTasks } from "../hooks/useTasks";
 import { useUiStore } from "../state/stores/uiStore";
 import Icon from "../components/Icon";
@@ -6,6 +7,7 @@ import AppCalendar from "../components/AppCalendar";
 import { usePreferencesStore } from "../state/stores/preferencesStore";
 import { formatInTimeZone, getTodayInTimeZone, utcIsoToDateTimeInput, zonedDateTimeToUtcIso } from "../lib/datetime";
 type Task = Record<string, any>;
+type TaskScope = "daily" | "shopping" | "all";
 const STATUS_LABEL: Record<string, string> = { todo: "לביצוע", in_progress: "בביצוע", done: "בוצע" };
 const STATUS_COLOR: Record<string, string> = {
   todo: "border-slate-700",
@@ -301,23 +303,37 @@ function EditTaskModal({ task, onClose, onSave, members }: {
   );
 }
 export default function Tasks() {
+  const navigate = useNavigate();
   const timeZone = usePreferencesStore((s) => s.timeZone);
   const { data: tasks = [], createTask, updateTask, deleteTask, members = [] } = useTasks();
   const { taskBoardView, setTaskBoardView, selectedDate, setSelectedDate } = useUiStore();
   const [showModal, setShowModal] = useState(false);
   const [pendingDelete, setPendingDelete] = useState<string | null>(null);
   const [editingTask, setEditingTask] = useState<Task | null>(null);
+  const [taskScope, setTaskScope] = useState<TaskScope>("daily");
   const [filterType, setFilterType] = useState<"all" | "priority" | "time_sensitive">("all");
   const [filterAssignee, setFilterAssignee] = useState<string>("all");
   const [timelineMode, setTimelineMode] = useState<"1" | "3" | "7">("1");
   const [showCalPicker, setShowCalPicker] = useState(false);
   const calPickerRef = useRef<HTMLDivElement>(null);
-  const visible = tasks.filter((t) => {
+  const isShoppingTask = (task: Task) => task.module === "inventory" || task.source_type === "inventory_threshold";
+  const shoppingTasks = useMemo(() => tasks.filter(isShoppingTask), [tasks]);
+  const everydayTasks = useMemo(() => tasks.filter((task) => !isShoppingTask(task)), [tasks]);
+  const sourceTasks = taskScope === "daily" ? everydayTasks : taskScope === "shopping" ? shoppingTasks : tasks;
+  const visible = sourceTasks.filter((t) => {
     if (t.status === "cancelled") return false;
     if (filterType !== "all" && t.task_type !== filterType) return false;
     if (filterAssignee !== "all" && t.assigned_to !== filterAssignee) return false;
     return true;
   });
+  const openShoppingCount = shoppingTasks.filter((t) => t.status !== "done" && t.status !== "cancelled").length;
+  const visibleOpenCount = visible.filter((t) => t.status !== "done").length;
+  const scopeTitle = taskScope === "daily" ? "משימות הבית" : taskScope === "shopping" ? "קניות וחוסרים" : "כל המשימות";
+  const scopeDescription = taskScope === "daily"
+    ? "כאן מופיעות רק המשימות השוטפות של הבית, בלי עומס של קניות."
+    : taskScope === "shopping"
+    ? "ריכוז אוטומטי של חוסרים וקניות שמגיעים מהמלאי."
+    : "תצוגה מאוחדת של כל מה שפתוח בבית.";
   const handleStatusChange = (id: string, status: string, task?: Task) => {
     updateTask.mutate({ id, status });
     // If recurring and being set to done, create next occurrence
@@ -394,7 +410,7 @@ export default function Tasks() {
             <button onClick={() => setPendingDelete(task.id)} className="text-slate-600 hover:text-red-400 transition-colors"><Icon name="trash" className="w-3.5 h-3.5" /></button>
           </div>
         ))}
-        {sorted.length === 0 && <div className="text-center py-12 text-slate-500">אין משימות עדיין. הוסף אחת.</div>}
+        {sorted.length === 0 && <div className="text-center py-12 text-slate-500">{taskScope === "shopping" ? "אין כרגע פריטים פתוחים לקנייה." : "אין משימות כרגע. אפשר להוסיף אחת חדשה."}</div>}
       </div>
     );
   };
@@ -495,13 +511,55 @@ export default function Tasks() {
     <div>
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h2 className="text-2xl font-bold text-theme">משימות</h2>
-          <p className="text-theme-muted text-sm mt-0.5">{visible.filter((t) => t.status !== "done").length} פתוחות</p>
+          <h2 className="text-2xl font-bold text-theme">{scopeTitle}</h2>
+          <p className="text-theme-muted text-sm mt-0.5">{scopeDescription}</p>
         </div>
         <button onClick={() => setShowModal(true)} className="bg-accent-600 hover:bg-accent-500 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors flex items-center gap-1.5">
           <Icon name="plus" className="w-3.5 h-3.5" /> הוספת משימה
         </button>
       </div>
+      <div className="mb-4 flex flex-wrap items-center gap-2">
+        {([
+          ["daily", "היומיום"],
+          ["shopping", "קניות"],
+          ["all", "הכול"],
+        ] as const).map(([scope, label]) => (
+          <button
+            key={scope}
+            onClick={() => setTaskScope(scope)}
+            className={"px-3 py-1.5 rounded-lg text-xs font-medium transition-colors border " +
+              (taskScope === scope
+                ? "bg-accent-700 border-accent-600 text-white"
+                : "bg-slate-900 border-slate-800 text-theme-muted hover:text-theme")}
+          >
+            {label}
+          </button>
+        ))}
+        <span className="text-xs text-theme-muted">{visibleOpenCount} פתוחות</span>
+      </div>
+
+      {taskScope === "daily" && openShoppingCount > 0 && (
+        <div className="mb-5 rounded-2xl border border-amber-800 bg-amber-950/20 px-4 py-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-start gap-2">
+            <Icon name="package" className="w-4 h-4 text-amber-300 shrink-0 mt-0.5" />
+            <div>
+              <div className="text-sm font-medium text-amber-200">{openShoppingCount} פריטי קנייה ממתינים בנפרד</div>
+              <p className="text-xs text-amber-300 mt-1">העברתי אותם מחוץ לזרם המשימות הרגיל כדי שהיומיום ירגיש נקי וברור יותר.</p>
+            </div>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <button onClick={() => setTaskScope("shopping")}
+              className="px-3 py-1.5 rounded-lg bg-amber-700 hover:bg-amber-600 text-white text-xs font-medium transition-colors">
+              הצג קניות כאן
+            </button>
+            <button onClick={() => navigate("/inventory")}
+              className="px-3 py-1.5 rounded-lg bg-slate-900 border border-slate-700 hover:bg-slate-800 text-theme text-xs font-medium transition-colors">
+              עבור לרשימת הקניות
+            </button>
+          </div>
+        </div>
+      )}
+
       <div className="flex items-center gap-3 mb-5 flex-wrap">
         <div className="flex rounded-lg bg-slate-900 border border-slate-800 p-0.5">
           {(["all", "priority", "time_sensitive"] as const).map((f) => (

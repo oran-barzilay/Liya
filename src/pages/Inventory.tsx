@@ -1,6 +1,8 @@
 import { useState } from "react";
 import { useInventory } from "../hooks/useInventory";
 import { useInventoryCategories } from "../hooks/useInventoryCategories";
+import { useTasks } from "../hooks/useTasks";
+import AiAssistantCard from "../components/AiAssistantCard";
 import Icon from "../components/Icon";
 type Item = Record<string, any>;
 type Category = Record<string, any>;
@@ -189,6 +191,7 @@ function InlineAddTrigger({
 export default function Inventory() {
   const { data: items = [], upsertItem, deleteItem } = useInventory();
   const { data: categories = [], addCategory, deleteCategory } = useInventoryCategories();
+  const { createTask, data: allTasks = [] } = useTasks();
   const [modal, setModal] = useState<{ open: boolean; item?: Item; defaultCategoryId?: string | null }>({ open: false });
   const [pendingDelete, setPendingDelete] = useState<Item | null>(null);
   const [pendingDeleteCat, setPendingDeleteCat] = useState<Category | null>(null);
@@ -273,6 +276,22 @@ export default function Inventory() {
     });
   };
 
+  const addInventoryFromAi = (item: Item) =>
+    new Promise<void>((resolve, reject) => {
+      upsertItem.mutate(item, {
+        onSuccess: () => resolve(),
+        onError: (err) => reject(err),
+      });
+    });
+
+  const addTaskFromAi = (task: Item) =>
+    new Promise<void>((resolve, reject) => {
+      createTask.mutate(task, {
+        onSuccess: () => resolve(),
+        onError: (err) => reject(err),
+      });
+    });
+
   return (
     <div>
       <div className="flex items-center justify-between mb-5">
@@ -329,6 +348,14 @@ export default function Inventory() {
           </button>
         </div>
       </div>
+
+      <AiAssistantCard
+        inventory={items as Item[]}
+        tasks={allTasks as Item[]}
+        onAddInventoryItem={addInventoryFromAi}
+        onAddTask={addTaskFromAi}
+      />
+
       {/* Category management */}
       {showCatMgmt && (
         <div className="bg-slate-900 border border-slate-800 rounded-xl p-4 mb-5">

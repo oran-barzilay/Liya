@@ -26,37 +26,38 @@ function extractJson(text: string): string {
 }
 
 export default async function handler(req: Request): Promise<Response> {
-  if (req.method !== "POST") {
-    return new Response(JSON.stringify({ error: "Method not allowed" }), {
-      status: 405,
-      headers: { "Content-Type": "application/json" },
-    });
-  }
+  try {
+    if (req.method !== "POST") {
+      return new Response(JSON.stringify({ error: "Method not allowed" }), {
+        status: 405,
+        headers: { "Content-Type": "application/json" },
+      });
+    }
 
-  const apiKey = process.env.GOOGLE_AI_API_KEY || process.env.GEMINI_API_KEY;
-  if (!apiKey) {
-    return new Response(
-      JSON.stringify({
-        error: "Missing server key",
-        detail: "Set GOOGLE_AI_API_KEY (or GEMINI_API_KEY) in Vercel project environment variables.",
-      }),
-      { status: 500, headers: { "Content-Type": "application/json" } }
-    );
-  }
+    const apiKey = process.env.GOOGLE_AI_API_KEY || process.env.GEMINI_API_KEY;
+    if (!apiKey) {
+      return new Response(
+        JSON.stringify({
+          error: "Missing server key",
+          detail: "Set GOOGLE_AI_API_KEY (or GEMINI_API_KEY) in Vercel project environment variables.",
+        }),
+        { status: 500, headers: { "Content-Type": "application/json" } }
+      );
+    }
 
-  const body = (await req.json().catch(() => ({}))) as AssistantRequest;
-  const message = String(body.message ?? "").trim();
-  if (!message) {
-    return new Response(JSON.stringify({ error: "message is required" }), {
-      status: 400,
-      headers: { "Content-Type": "application/json" },
-    });
-  }
+    const body = (await req.json().catch(() => ({}))) as AssistantRequest;
+    const message = String(body.message ?? "").trim();
+    if (!message) {
+      return new Response(JSON.stringify({ error: "message is required" }), {
+        status: 400,
+        headers: { "Content-Type": "application/json" },
+      });
+    }
 
-  const inventory = Array.isArray(body.context?.inventory) ? body.context?.inventory : [];
-  const tasks = Array.isArray(body.context?.tasks) ? body.context?.tasks : [];
+    const inventory = Array.isArray(body.context?.inventory) ? body.context?.inventory : [];
+    const tasks = Array.isArray(body.context?.tasks) ? body.context?.tasks : [];
 
-  const systemInstruction = [
+    const systemInstruction = [
     "You are a Hebrew assistant for a family household app.",
     "You help with shopping list questions and task creation suggestions.",
     "Return ONLY valid JSON, no markdown.",
@@ -77,50 +78,57 @@ export default async function handler(req: Request): Promise<Response> {
     "Do not invent inventory items or tasks that are not in context when answering questions.",
   ].join("\n");
 
-  const userPrompt = [
+    const userPrompt = [
     `User message: ${message}`,
     `Inventory context (first 200): ${JSON.stringify(inventory.slice(0, 200))}`,
     `Tasks context (first 200): ${JSON.stringify(tasks.slice(0, 200))}`,
   ].join("\n\n");
 
-  const geminiRes = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${encodeURIComponent(apiKey)}`,
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        contents: [{ role: "user", parts: [{ text: `${systemInstruction}\n\n${userPrompt}` }] }],
-        generationConfig: { temperature: 0.2 },
-      }),
+    const geminiRes = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${encodeURIComponent(apiKey)}`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          contents: [{ role: "user", parts: [{ text: `${systemInstruction}\n\n${userPrompt}` }] }],
+          generationConfig: { temperature: 0.2 },
+        }),
+      }
+    );
+
+    if (!geminiRes.ok) {
+      const detail = await geminiRes.text();
+      return new Response(JSON.stringify({ error: "Gemini request failed", detail }), {
+        status: 502,
+        headers: { "Content-Type": "application/json" },
+      });
     }
-  );
 
-  if (!geminiRes.ok) {
-    const detail = await geminiRes.text();
-    return new Response(JSON.stringify({ error: "Gemini request failed", detail }), {
-      status: 502,
-      headers: { "Content-Type": "application/json" },
-    });
-  }
+    const geminiJson = (await geminiRes.json()) as {
+      candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>;
+    };
 
-  const geminiJson = (await geminiRes.json()) as {
-    candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>;
-  };
+    const text = geminiJson.candidates?.[0]?.content?.parts?.map((p) => p.text ?? "").join("\n") ?? "";
+    const parsed = safeJsonParse<{ reply?: string; actions?: Array<{ type?: string; payload?: Record<string, unknown> }> }>(extractJson(text));
 
-  const text = geminiJson.candidates?.[0]?.content?.parts?.map((p) => p.text ?? "").join("\n") ?? "";
-  const parsed = safeJsonParse<{ reply?: string; actions?: Array<{ type?: string; payload?: Record<string, unknown> }> }>(extractJson(text));
+    if (!parsed) {
+      return new Response(JSON.stringify({ reply: text || "לא הצלחתי להבין, נסה לנסח אחרת.", actions: [] }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      });
+    }
 
-  if (!parsed) {
-    return new Response(JSON.stringify({ reply: text || "לא הצלחתי להבין, נסה לנסח אחרת.", actions: [] }), {
+    const actions = Array.isArray(parsed.actions) ? parsed.actions : [];
+    return new Response(JSON.stringify({ reply: parsed.reply ?? "בוצע.", actions }), {
       status: 200,
       headers: { "Content-Type": "application/json" },
     });
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : "Unknown server error";
+    return new Response(JSON.stringify({ error: "Assistant server failure", detail }), {
+      status: 500,
+      headers: { "Content-Type": "application/json" },
+    });
   }
-
-  const actions = Array.isArray(parsed.actions) ? parsed.actions : [];
-  return new Response(JSON.stringify({ reply: parsed.reply ?? "בוצע.", actions }), {
-    status: 200,
-    headers: { "Content-Type": "application/json" },
-  });
 }
 

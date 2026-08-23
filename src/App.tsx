@@ -8,6 +8,7 @@ import Login from "./pages/Login";
 import Setup from "./pages/Setup";
 import Dashboard from "./pages/Dashboard";
 import Weekly from "./pages/Weekly";
+import Assistant from "./pages/Assistant";
 import Tasks from "./pages/Tasks";
 import Inventory from "./pages/Inventory";
 import Baby from "./pages/Baby";
@@ -76,6 +77,7 @@ function AppRoutes() {
       <Routes>
         <Route path="/" element={<Dashboard />} />
         <Route path="/weekly" element={<Weekly />} />
+        <Route path="/assistant" element={<Assistant />} />
         <Route path="/tasks" element={<Tasks />} />
         <Route path="/inventory" element={<Inventory />} />
         <Route path="/baby" element={<Baby />} />

@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Icon from "./Icon";
 import { usePreferencesStore } from "../state/stores/preferencesStore";
 import { zonedDateTimeToUtcIso } from "../lib/datetime";
@@ -40,17 +40,22 @@ export default function AiAssistantCard({
   tasks,
   onAddInventoryItem,
   onAddTask,
+  standalone = false,
+  initialMessage,
 }: {
   inventory: Row[];
   tasks: Row[];
   onAddInventoryItem: (item: Row) => Promise<void> | void;
   onAddTask: (task: Row) => Promise<void> | void;
+  standalone?: boolean;
+  initialMessage?: string;
 }) {
   const timeZone = usePreferencesStore((s) => s.timeZone);
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(standalone);
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [messages, setMessages] = useState<Array<{ role: "user" | "assistant"; text: string }>>([]);
+  const sentInitial = useRef(false);
 
   const inventoryContext = useMemo(
     () => inventory.map((i) => ({ name: i.name, quantity: i.quantity, unit: i.unit, critical_threshold: i.critical_threshold, category_id: i.category_id })),
@@ -111,12 +116,12 @@ export default function AiAssistantCard({
     }
   };
 
-  const send = async () => {
-    const message = input.trim();
+  const send = async (rawMessage?: string) => {
+    const message = (rawMessage ?? input).trim();
     if (!message || isLoading) return;
 
     setMessages((prev) => [...prev, { role: "user", text: message }]);
-    setInput("");
+    if (!rawMessage) setInput("");
     setIsLoading(true);
 
     try {
@@ -132,9 +137,18 @@ export default function AiAssistantCard({
         }),
       });
 
-      const data = (await res.json()) as { reply?: string; actions?: AssistantAction[]; error?: string; detail?: string };
+      const responseText = await res.text();
+      let data: { reply?: string; actions?: AssistantAction[]; error?: string; detail?: string } = {};
+      if (responseText.trim()) {
+        try {
+          data = JSON.parse(responseText) as { reply?: string; actions?: AssistantAction[]; error?: string; detail?: string };
+        } catch {
+          setMessages((prev) => [...prev, { role: "assistant", text: `לא הצלחתי כרגע: תשובת שרת לא תקינה (${res.status}).` }]);
+          return;
+        }
+      }
       if (!res.ok) {
-        const text = data.detail || data.error || "שגיאה לא צפויה";
+        const text = data.detail || data.error || `שגיאה ${res.status}`;
         setMessages((prev) => [...prev, { role: "assistant", text: `לא הצלחתי כרגע: ${text}` }]);
         return;
       }
@@ -155,22 +169,36 @@ export default function AiAssistantCard({
     }
   };
 
+  useEffect(() => {
+    if (!standalone) return;
+    setOpen(true);
+  }, [standalone]);
+
+  useEffect(() => {
+    const msg = (initialMessage ?? "").trim();
+    if (!standalone || !msg || sentInitial.current || isLoading) return;
+    sentInitial.current = true;
+    void send(msg);
+  }, [standalone, initialMessage, isLoading]);
+
   return (
     <section className="mb-5 rounded-2xl border border-accent-800/70 bg-accent-950/20">
-      <button
-        type="button"
-        onClick={() => setOpen((s) => !s)}
-        className="w-full flex items-center justify-between px-4 py-3 text-right"
-      >
-        <div>
-          <h3 className="text-sm font-semibold text-theme flex items-center gap-2">
-            <Icon name="users" className="w-4 h-4 text-accent-400" />
-            סוכן חכם לקניות ומשימות
-          </h3>
-          <p className="text-xs text-theme-muted mt-1">לדוגמה: "תוסיף חלב וביצים" או "מה חסר לקנייה השבוע?"</p>
-        </div>
-        <Icon name={open ? "chevron-up" : "chevron-down"} className="w-4 h-4 text-theme-muted" />
-      </button>
+      {!standalone && (
+        <button
+          type="button"
+          onClick={() => setOpen((s) => !s)}
+          className="w-full flex items-center justify-between px-4 py-3 text-right"
+        >
+          <div>
+            <h3 className="text-sm font-semibold text-theme flex items-center gap-2">
+              <Icon name="users" className="w-4 h-4 text-accent-400" />
+              סוכן חכם לקניות ומשימות
+            </h3>
+            <p className="text-xs text-theme-muted mt-1">לדוגמה: "תוסיף חלב וביצים" או "מה חסר לקנייה השבוע?"</p>
+          </div>
+          <Icon name={open ? "chevron-up" : "chevron-down"} className="w-4 h-4 text-theme-muted" />
+        </button>
+      )}
 
       {open && (
         <div className="px-4 pb-4 space-y-3">

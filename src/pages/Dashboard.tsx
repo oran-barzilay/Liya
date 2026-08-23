@@ -51,6 +51,7 @@ export default function Dashboard() {
   const { data: children = [] } = useChildren();
   const { data: allBabyLogs = [] } = useBabyLogs();
   const [copied, setCopied] = useState(false);
+  const [agentQuestion, setAgentQuestion] = useState("");
   const today = getTodayInTimeZone(timeZone);
   const hour = Number(formatInTimeZone(new Date(), timeZone, { hour: "2-digit", hour12: false }, "en-GB"));
   const greeting = hour < 12 ? "בוקר טוב" : hour < 17 ? "צהריים טובים" : "ערב טוב";
@@ -89,6 +90,11 @@ export default function Dashboard() {
     setTimeout(() => setCopied(false), 2000);
   };
 
+  const goToAssistant = () => {
+    const q = agentQuestion.trim();
+    navigate(q ? `/assistant?q=${encodeURIComponent(q)}` : "/assistant");
+  };
+
   return (
     <div>
       <div className="mb-6 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
@@ -123,6 +129,32 @@ export default function Dashboard() {
           )}
         </div>
       </div>
+
+      <section className="mb-6 rounded-2xl border border-accent-800/70 bg-accent-950/20 p-4">
+        <div className="flex items-center gap-2 mb-2">
+          <Icon name="users" className="w-4 h-4 text-accent-400" />
+          <h3 className="text-sm font-semibold text-theme">שאלה מהירה לסוכן</h3>
+        </div>
+        <p className="text-xs text-theme-muted mb-3">שאל כאן שאלה ראשונה, ואז נעביר אותך למסך צ'אט ייעודי עם כל ההקשר של הבית.</p>
+        <div className="flex gap-2">
+          <input
+            value={agentQuestion}
+            onChange={(e) => setAgentQuestion(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.preventDefault();
+                goToAssistant();
+              }
+            }}
+            className="input-base flex-1"
+            placeholder="לדוגמה: מה המשימות שלי למחר?"
+          />
+          <button type="button" onClick={goToAssistant}
+            className="px-4 py-2 rounded-lg bg-accent-600 hover:bg-accent-500 text-white text-sm font-medium shrink-0">
+            פתח צ'אט
+          </button>
+        </div>
+      </section>
 
       <section className="mb-6 grid gap-4 lg:grid-cols-[1.3fr_0.9fr]">
         <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5">
@@ -201,6 +233,7 @@ export default function Dashboard() {
           )}
         </div>
       </section>
+
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
         <StatCard icon={<Icon name="clock" className="w-6 h-6" />} label="משימות מתוזמנות היום" value={todayTimeSensitive.length} sub={openEverydayTasks.length + " משימות פתוחות"} color="accent" onClick={() => navigate("/tasks")} />

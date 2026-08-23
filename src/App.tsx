@@ -7,6 +7,7 @@ import Layout from "./components/Layout";
 import Login from "./pages/Login";
 import Setup from "./pages/Setup";
 import Dashboard from "./pages/Dashboard";
+import Weekly from "./pages/Weekly";
 import Tasks from "./pages/Tasks";
 import Inventory from "./pages/Inventory";
 import Baby from "./pages/Baby";
@@ -74,6 +75,7 @@ function AppRoutes() {
     <Layout>
       <Routes>
         <Route path="/" element={<Dashboard />} />
+        <Route path="/weekly" element={<Weekly />} />
         <Route path="/tasks" element={<Tasks />} />
         <Route path="/inventory" element={<Inventory />} />
         <Route path="/baby" element={<Baby />} />

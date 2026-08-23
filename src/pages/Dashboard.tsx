@@ -16,8 +16,9 @@ function formatMinutes(mins: number) {
   return m > 0 ? `${h} שע' ${m} דק'` : `${h} שעה`;
 }
 
-function StatCard({ icon, label, value, sub, color = "accent" }: {
-  icon: React.ReactNode; label: string; value: string | number; sub?: string; color?: "accent" | "emerald" | "amber" | "red";
+function StatCard({ icon, label, value, sub, color = "accent", onClick }: {
+  icon: React.ReactNode; label: string; value: string | number; sub?: string;
+  color?: "accent" | "emerald" | "amber" | "red"; onClick?: () => void;
 }) {
   const colorMap = {
     accent:  "border-accent-800 bg-accent-950/40",
@@ -25,13 +26,17 @@ function StatCard({ icon, label, value, sub, color = "accent" }: {
     amber:   "border-amber-800 bg-amber-950/40",
     red:     "border-red-800 bg-red-950/40",
   };
+  const Tag = onClick ? "button" : "div";
   return (
-    <div className={"rounded-xl border p-4 " + colorMap[color]}>
+    <Tag
+      onClick={onClick}
+      className={"rounded-xl border p-4 text-right w-full transition-colors " + colorMap[color] + (onClick ? " hover:brightness-110 active:scale-95 cursor-pointer" : "")}
+    >
       <div className="mb-2 text-theme-muted">{icon}</div>
       <div className="text-2xl font-bold text-theme">{value}</div>
       <div className="text-sm font-medium text-theme-muted mt-0.5">{label}</div>
-      {sub && <div className="text-xs text-theme-muted mt-1 opacity-70">{sub}</div>}
-    </div>
+      {sub && <div className="text-xs text-theme-muted mt-1 opacity-70 truncate">{sub}</div>}
+    </Tag>
   );
 }
 
@@ -44,14 +49,14 @@ export default function Dashboard() {
   const { data: appointments = [] } = useAppointments();
   const { totals } = useTransactions();
   const { data: children = [] } = useChildren();
-  const { data: allBabyLogs = [] } = useBabyLogs();          // all children, no filter
+  const { data: allBabyLogs = [] } = useBabyLogs();
   const [copied, setCopied] = useState(false);
   const today = getTodayInTimeZone(timeZone);
   const hour = Number(formatInTimeZone(new Date(), timeZone, { hour: "2-digit", hour12: false }, "en-GB"));
   const greeting = hour < 12 ? "בוקר טוב" : hour < 17 ? "צהריים טובים" : "ערב טוב";
   const todayTimeSensitive = tasks.filter(t => t.task_type === "time_sensitive" && t.status !== "done" && t.scheduled_start_at?.slice(0, 10) === today);
   const lowStock = inventory.filter(item => Number(item.quantity) < Number(item.critical_threshold));
-  const nextAppt = appointments[0];
+  const nextAppt = appointments.find((a) => (a.starts_at ?? "") >= new Date().toISOString()) ?? appointments[0];
   const balance = totals.income - totals.expenses;
   const openEverydayTasks = useMemo(
     () => tasks.filter((t) => t.status !== "done" && t.module !== "inventory"),
@@ -101,6 +106,10 @@ export default function Dashboard() {
           <button onClick={() => navigate("/tasks")}
             className="bg-accent-600 hover:bg-accent-500 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors flex items-center gap-1.5">
             <Icon name="plus" className="w-3.5 h-3.5" /> משימה חדשה
+          </button>
+          <button onClick={() => navigate("/weekly")}
+            className="bg-slate-900 border border-slate-800 hover:bg-slate-800 text-theme text-sm font-medium px-4 py-2 rounded-lg transition-colors flex items-center gap-1.5">
+            <Icon name="calendar" className="w-3.5 h-3.5" /> תכנון שבועי
           </button>
           <button onClick={() => navigate("/inventory")}
             className="bg-slate-900 border border-slate-800 hover:bg-slate-800 text-theme text-sm font-medium px-4 py-2 rounded-lg transition-colors flex items-center gap-1.5">
@@ -194,15 +203,16 @@ export default function Dashboard() {
       </section>
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-        <StatCard icon={<Icon name="clock" className="w-6 h-6" />} label="משימות מתוזמנות היום" value={todayTimeSensitive.length} sub={openEverydayTasks.length + " משימות פתוחות"} color="accent" />
+        <StatCard icon={<Icon name="clock" className="w-6 h-6" />} label="משימות מתוזמנות היום" value={todayTimeSensitive.length} sub={openEverydayTasks.length + " משימות פתוחות"} color="accent" onClick={() => navigate("/tasks")} />
         <StatCard icon={<Icon name="package" className="w-6 h-6" />} label="פריטים לקנייה" value={lowStock.length}
-          sub={lowStock.slice(0, 2).map(i => i.name).join(", ") || "הכל תקין"} color={lowStock.length > 0 ? "red" : "emerald"} />
+          sub={lowStock.slice(0, 2).map(i => i.name).join(", ") || "הכל תקין"} color={lowStock.length > 0 ? "red" : "emerald"} onClick={() => navigate("/inventory")} />
         <StatCard icon={<Icon name="wallet" className="w-6 h-6" />} label="מאזן חודשי" value={"₪" + balance.toLocaleString("he-IL")}
           sub={"הכנסות ₪" + totals.income.toLocaleString("he-IL") + " | הוצאות ₪" + totals.expenses.toLocaleString("he-IL")}
-          color={balance >= 0 ? "emerald" : "red"} />
+          color={balance >= 0 ? "emerald" : "red"} onClick={() => navigate("/finance")} />
         <StatCard icon={<Icon name="medical" className="w-6 h-6" />} label="אירוע הבא"
           value={nextAppt ? formatInTimeZone(nextAppt.starts_at, timeZone, { month: "short", day: "numeric" }) : "אין"}
-          sub={nextAppt?.title ?? "אין אירועים קרובים"} color="amber" />
+          sub={nextAppt ? `${nextAppt.title} · ${formatInTimeZone(nextAppt.starts_at, timeZone, { weekday: "long" })}` : "אין אירועים קרובים"}
+          color="amber" onClick={() => navigate("/weekly")} />
       </div>
 
       {/* ─── Baby daily summary ─── */}

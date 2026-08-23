@@ -6,11 +6,12 @@ import { useThemeStore, getContrastColor } from "../state/stores/themeStore";
 import Icon from "./Icon";
 
 const NAV_ITEMS = [
-  { to: "/",         icon: "home"     as const, label: "היום"     },
-  { to: "/tasks",    icon: "tasks"    as const, label: "משימות"  },
-  { to: "/inventory",icon: "inventory"as const, label: "קניות"   },
-  { to: "/baby",     icon: "babies"   as const, label: "תינוקות" },
-  { to: "/finance",  icon: "finance"  as const, label: "כספים"   },
+  { to: "/",        icon: "home"      as const, label: "היום"      },
+  { to: "/weekly",  icon: "calendar"  as const, label: "שבועי"     },
+  { to: "/tasks",   icon: "tasks"     as const, label: "משימות"   },
+  { to: "/inventory",icon: "inventory"as const, label: "קניות"    },
+  { to: "/baby",    icon: "babies"    as const, label: "תינוקות"  },
+  { to: "/finance", icon: "finance"   as const, label: "כספים"    },
 ] as const;
 
 export default function Layout({ children }: { children: React.ReactNode }) {
@@ -230,14 +231,14 @@ export default function Layout({ children }: { children: React.ReactNode }) {
             to={item.to}
             end={item.to === "/"}
             className={({ isActive }) =>
-              `flex-1 flex flex-col items-center justify-center py-2 gap-0.5 transition-colors
+              `flex-1 flex flex-col items-center justify-center py-2 gap-0.5 min-w-0 transition-colors
                ${isActive ? "text-accent-400" : menuTextMuted}`
             }
           >
             {({ isActive }) => (
               <>
-                <Icon name={item.icon} className={`w-5 h-5 ${isActive ? "text-accent-400" : ""}`} />
-                <span className="text-[9px] font-medium leading-tight">{item.label}</span>
+                <Icon name={item.icon} className={`w-5 h-5 shrink-0 ${isActive ? "text-accent-400" : ""}`} />
+                <span className="text-[8px] font-medium leading-tight truncate w-full text-center px-0.5">{item.label}</span>
               </>
             )}
           </NavLink>

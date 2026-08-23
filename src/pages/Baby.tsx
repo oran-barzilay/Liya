@@ -1,5 +1,5 @@
 import { useState, useMemo } from "react";
-import { useChildren, useBabyLogs, useAppointments } from "../hooks/useBaby";
+import { useChildren, useBabyLogs } from "../hooks/useBaby";
 import Icon from "../components/Icon";
 import AppCalendar from "../components/AppCalendar";
 import { usePreferencesStore } from "../state/stores/preferencesStore";
@@ -268,102 +268,6 @@ function EditLogModal({ log, onClose, onSave }: { log: Row; onClose: () => void;
   );
 }
 
-/* ─── Add Event Modal ─── */
-function AddEventModal({ children, onClose, onSave }: { children: Row[]; onClose: () => void; onSave: (a: Row) => void }) {
-  const timeZone = usePreferencesStore((s) => s.timeZone);
-  const [title, setTitle] = useState("");
-  const [startsAt, setStartsAt] = useState(nowLocal(timeZone));
-  const [childId, setChildId] = useState(children[0]?.id ?? "");
-  const [provider, setProvider] = useState("");
-  const [loc, setLoc] = useState("");
-  return (
-    <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
-      <form onSubmit={e => {
-        e.preventDefault();
-        onSave({ title, starts_at: startsAt ? zonedDateTimeToUtcIso(startsAt, timeZone) : null, child_id: childId || null, provider_name: provider || null, location: loc || null, status: "scheduled" });
-        onClose();
-      }}
-        className="bg-slate-900 border border-slate-700 rounded-2xl p-5 w-full max-w-sm space-y-4 overflow-y-auto max-h-[92dvh]">
-        <div className="flex items-center justify-between">
-          <h3 className="font-semibold text-theme">אירוע חדש</h3>
-          <button type="button" onClick={onClose} className="text-theme-muted hover:text-theme"><Icon name="x" className="w-4 h-4" /></button>
-        </div>
-        <div>
-          <label className="text-xs text-theme-muted block mb-1">כותרת *</label>
-          <input required value={title} onChange={e => setTitle(e.target.value)} className="input-base w-full" placeholder="ביקור רופא / חיסון / אירוע" />
-        </div>
-        <AppCalendar mode="datetime" value={startsAt} onChange={setStartsAt} label="תאריך ושעה *" inline />
-        {children.length > 0 && (
-          <div>
-            <label className="text-xs text-theme-muted block mb-1">תינוק/ת</label>
-            <select value={childId} onChange={e => setChildId(e.target.value)} className="input-base w-full">
-              <option value="">— כללי —</option>
-              {children.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-            </select>
-          </div>
-        )}
-        <div>
-          <label className="text-xs text-theme-muted block mb-1">רופא / מטפל</label>
-          <input value={provider} onChange={e => setProvider(e.target.value)} className="input-base w-full" placeholder='ד"ר כהן' />
-        </div>
-        <div>
-          <label className="text-xs text-theme-muted block mb-1">מיקום</label>
-          <input value={loc} onChange={e => setLoc(e.target.value)} className="input-base w-full" placeholder="כתובת" />
-        </div>
-        <button type="submit" disabled={!title || !startsAt} className="w-full bg-accent-600 hover:bg-accent-500 disabled:opacity-50 text-white font-medium py-2 rounded-lg text-sm transition-colors">שמור אירוע</button>
-      </form>
-    </div>
-  );
-}
-
-/* ─── Edit Event Modal ─── */
-function EditEventModal({ event, children, onClose, onSave }: { event: Row; children: Row[]; onClose: () => void; onSave: (a: Row) => void }) {
-  const timeZone = usePreferencesStore((s) => s.timeZone);
-  const [title, setTitle] = useState(event.title ?? "");
-  const [startsAt, setStartsAt] = useState(event.starts_at ? utcIsoToDateTimeInput(event.starts_at, timeZone) : nowLocal(timeZone));
-  const [childId, setChildId] = useState(event.child_id ?? "");
-  const [provider, setProvider] = useState(event.provider_name ?? "");
-  const [loc, setLoc] = useState(event.location ?? "");
-  return (
-    <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
-      <form onSubmit={e => {
-        e.preventDefault();
-        onSave({ id: event.id, title, starts_at: startsAt ? zonedDateTimeToUtcIso(startsAt, timeZone) : null, child_id: childId || null, provider_name: provider || null, location: loc || null });
-        onClose();
-      }}
-        className="bg-slate-900 border border-slate-700 rounded-2xl p-5 w-full max-w-sm space-y-4 overflow-y-auto max-h-[92dvh]">
-        <div className="flex items-center justify-between">
-          <h3 className="font-semibold text-theme">עריכת אירוע</h3>
-          <button type="button" onClick={onClose} className="text-theme-muted hover:text-theme"><Icon name="x" className="w-4 h-4" /></button>
-        </div>
-        <div>
-          <label className="text-xs text-theme-muted block mb-1">כותרת *</label>
-          <input required value={title} onChange={e => setTitle(e.target.value)} className="input-base w-full" />
-        </div>
-        <AppCalendar mode="datetime" value={startsAt} onChange={setStartsAt} label="תאריך ושעה" inline />
-        {children.length > 0 && (
-          <div>
-            <label className="text-xs text-theme-muted block mb-1">תינוק/ת</label>
-            <select value={childId} onChange={e => setChildId(e.target.value)} className="input-base w-full">
-              <option value="">— כללי —</option>
-              {children.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-            </select>
-          </div>
-        )}
-        <div>
-          <label className="text-xs text-theme-muted block mb-1">רופא / מטפל</label>
-          <input value={provider} onChange={e => setProvider(e.target.value)} className="input-base w-full" placeholder='ד"ר כהן' />
-        </div>
-        <div>
-          <label className="text-xs text-theme-muted block mb-1">מיקום</label>
-          <input value={loc} onChange={e => setLoc(e.target.value)} className="input-base w-full" placeholder="כתובת" />
-        </div>
-        <button type="submit" className="w-full bg-accent-600 hover:bg-accent-500 text-white font-medium py-2 rounded-lg text-sm transition-colors">שמור</button>
-      </form>
-    </div>
-  );
-}
-
 /* ─── Simple Daily Charts ─── */
 function DailyCharts({ logs, days = 7, timeZone }: { logs: Row[]; days?: number; timeZone: string }) {
   const chartData = useMemo(() => {
@@ -460,10 +364,7 @@ export default function Baby() {
   const cid = activeChild || children[0]?.id;
   const activeChildData = children.find(c => c.id === cid);
   const { data: logs = [], addLog, updateLog, deleteLog } = useBabyLogs(cid);
-  const { data: appointments = [], upsertAppointment, deleteAppointment } = useAppointments();
-  const [tab, setTab] = useState<"logs" | "charts" | "events">("logs");
-  const [eventModal, setEventModal] = useState(false);
-  const [editingEvent, setEditingEvent] = useState<Row | null>(null);
+  const [tab, setTab] = useState<"logs" | "charts">("logs");
   const [addLogType, setAddLogType] = useState<string | null>(null);
   const [editingLog, setEditingLog] = useState<Row | null>(null);
   const [selectedDate, setSelectedDate] = useState(getTodayInTimeZone(timeZone));
@@ -506,13 +407,7 @@ export default function Baby() {
           <h2 className="text-2xl font-bold text-theme">תינוקות</h2>
           {activeChildData && <p className="text-accent-400 font-medium mt-0.5">{activeChildData.name}</p>}
         </div>
-        <div className="flex gap-2">
-          {tab === "events" && (
-            <button onClick={() => setEventModal(true)} className="bg-accent-600 hover:bg-accent-500 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors flex items-center gap-1.5">
-              <Icon name="plus" className="w-3.5 h-3.5" /> אירוע
-            </button>
-          )}
-        </div>
+        <div className="flex gap-2" />
       </div>
 
       {/* Empty state */}
@@ -561,11 +456,10 @@ export default function Baby() {
       {children.length > 0 && (
         <>
           <div className="flex rounded-lg bg-slate-900 border border-slate-800 p-0.5 w-fit mb-5">
-            {(["logs", "charts", "events"] as const).map(t => (
+            {(["logs", "charts"] as const).map(t => (
               <button key={t} onClick={() => setTab(t)} className={"px-4 py-1.5 rounded-md text-xs font-medium transition-colors flex items-center gap-1.5 " + (tab === t ? "bg-accent-700 text-white" : "text-theme-muted hover:text-theme")}>
                 {t === "logs" && <><Icon name="clipboard" className="w-3.5 h-3.5" /> יומן היום</>}
                 {t === "charts" && <><Icon name="chart" className="w-3.5 h-3.5" /> גרפים</>}
-                {t === "events" && <><Icon name="calendar" className="w-3.5 h-3.5" /> אירועים</>}
               </button>
             ))}
           </div>
@@ -641,33 +535,6 @@ export default function Baby() {
             <DailyCharts logs={logs} days={7} timeZone={timeZone} />
           )}
 
-          {/* ─── Events Tab ─── */}
-          {tab === "events" && (
-            <div className="space-y-3">
-              {appointments.length === 0 && <div className="text-center py-10 text-theme-muted">אין אירועים. הוסף אירוע חדש.</div>}
-              {appointments.map(appt => (
-                <div key={appt.id} className="bg-slate-900 border border-slate-800 rounded-xl px-4 py-3 flex items-start gap-4 group">
-                  <div className="text-center shrink-0">
-                    <div className="text-sm font-bold text-accent-400">{formatInTimeZone(appt.starts_at, timeZone, { month: "short", day: "numeric" })}</div>
-                    <div className="text-xs text-theme-muted">{formatInTimeZone(appt.starts_at, timeZone, { hour: "2-digit", minute: "2-digit" })}</div>
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="font-medium text-sm text-theme truncate">{appt.title}</div>
-                    {appt.provider_name && <div className="text-xs text-theme-muted mt-0.5">{appt.provider_name}</div>}
-                    {appt.location && <div className="text-xs text-theme-muted opacity-70 truncate">{appt.location}</div>}
-                  </div>
-                  <div className="flex gap-1 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
-                    <button onClick={() => setEditingEvent(appt)} className="text-theme-muted hover:text-accent-400 transition-colors">
-                      <Icon name="edit" className="w-3.5 h-3.5" />
-                    </button>
-                    <button onClick={() => deleteAppointment.mutate(appt.id)} className="text-theme-muted hover:text-red-400 transition-colors">
-                      <Icon name="trash" className="w-3.5 h-3.5" />
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
         </>
       )}
 
@@ -682,12 +549,6 @@ export default function Baby() {
       )}
       {editingLog && (
         <EditLogModal log={editingLog} onClose={() => setEditingLog(null)} onSave={log => updateLog.mutate(log)} />
-      )}
-      {eventModal && (
-        <AddEventModal children={children} onClose={() => setEventModal(false)} onSave={data => upsertAppointment.mutate(data)} />
-      )}
-      {editingEvent && (
-        <EditEventModal event={editingEvent} children={children} onClose={() => setEditingEvent(null)} onSave={data => upsertAppointment.mutate(data)} />
       )}
     </div>
   );

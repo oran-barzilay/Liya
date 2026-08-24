@@ -8,6 +8,8 @@ type AssistantRequest = {
   };
 };
 
+const MODEL_CANDIDATES = ["gemini-3.6-flash", "gemini-2.5-flash", "gemini-2.5-pro"];
+
 function safeJsonParse<T>(text: string): T | null {
   try {
     return JSON.parse(text) as T;
@@ -23,6 +25,37 @@ function extractJson(text: string): string {
   const last = text.lastIndexOf("}");
   if (first >= 0 && last > first) return text.slice(first, last + 1);
   return text.trim();
+}
+
+async function requestGeminiWithFallback(apiKey: string, body: string): Promise<Response> {
+  let lastDetail = "No Gemini response";
+
+  for (const model of MODEL_CANDIDATES) {
+    const res = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(apiKey)}`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body,
+      }
+    );
+
+    if (res.ok) return res;
+
+    const detail = await res.text();
+    lastDetail = `${model}: ${detail}`;
+    const shouldTryNext =
+      res.status === 404 ||
+      detail.includes("no longer available") ||
+      detail.includes("is not found") ||
+      detail.includes("not supported");
+
+    if (!shouldTryNext) {
+      throw new Error(lastDetail);
+    }
+  }
+
+  throw new Error(lastDetail);
 }
 
 export default async function handler(req: Request): Promise<Response> {
@@ -84,25 +117,13 @@ export default async function handler(req: Request): Promise<Response> {
     `Tasks context (first 200): ${JSON.stringify(tasks.slice(0, 200))}`,
   ].join("\n\n");
 
-    const geminiRes = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent?key=${encodeURIComponent(apiKey)}`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          contents: [{ role: "user", parts: [{ text: `${systemInstruction}\n\n${userPrompt}` }] }],
-          generationConfig: { temperature: 0.2 },
-        }),
-      }
+    const geminiRes = await requestGeminiWithFallback(
+      apiKey,
+      JSON.stringify({
+        contents: [{ role: "user", parts: [{ text: `${systemInstruction}\n\n${userPrompt}` }] }],
+        generationConfig: { temperature: 0.2 },
+      })
     );
-
-    if (!geminiRes.ok) {
-      const detail = await geminiRes.text();
-      return new Response(JSON.stringify({ error: "Gemini request failed", detail }), {
-        status: 502,
-        headers: { "Content-Type": "application/json" },
-      });
-    }
 
     const geminiJson = (await geminiRes.json()) as {
       candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>;

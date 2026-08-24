@@ -1,4 +1,4 @@
-import { useMemo, useEffect } from "react";
+import { useMemo, useEffect, useState, useCallback } from "react";
 import { useSearchParams } from "react-router-dom";
 import AiAssistantCard from "../components/AiAssistantCard";
 import { useInventory } from "../hooks/useInventory";
@@ -7,8 +7,8 @@ import { useChatHistory } from "../hooks/useChatHistory";
 import Icon from "../components/Icon";
 
 export default function Assistant() {
-  const [params] = useSearchParams();
-  const initialQuestion = params.get("q") ?? "";
+  const [params, setParams] = useSearchParams();
+  const [pendingInitialMessage, setPendingInitialMessage] = useState(() => (params.get("q") ?? "").trim());
 
   const { data: inventory = [], upsertItem } = useInventory();
   const { data: tasks = [], createTask } = useTasks();
@@ -54,6 +54,16 @@ export default function Assistant() {
   const handleNewChat = () => {
     createConversation();
   };
+
+  const consumePendingInitialMessage = useCallback(() => {
+    if (!pendingInitialMessage) return;
+    setPendingInitialMessage("");
+    if (params.get("q")) {
+      const next = new URLSearchParams(params);
+      next.delete("q");
+      setParams(next, { replace: true });
+    }
+  }, [pendingInitialMessage, params, setParams]);
 
   const handleDeleteConversation = (e: React.MouseEvent, id: string) => {
     e.stopPropagation();
@@ -122,13 +132,18 @@ export default function Assistant() {
             <AiAssistantCard
               key={activeConversation.id}
               standalone
-              initialMessage={initialQuestion}
+              initialMessage={pendingInitialMessage || undefined}
               inventory={inventory as Array<Record<string, any>>}
               tasks={tasks as Array<Record<string, any>>}
               onAddInventoryItem={addInventoryFromAi}
               onAddTask={addTaskFromAi}
               messages={activeConversation.messages}
-              onMessagesChange={(msgs) => updateConversation(activeConversation.id, msgs)}
+              onMessagesChange={(msgs) => {
+                if (pendingInitialMessage && msgs.length > 0) {
+                  consumePendingInitialMessage();
+                }
+                updateConversation(activeConversation.id, msgs);
+              }}
             />
           ) : (
             <div className="rounded-2xl border border-accent-800/70 bg-accent-950/20 p-8 text-center text-theme-muted text-sm">

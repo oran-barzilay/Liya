@@ -3,6 +3,8 @@ import react from "@vitejs/plugin-react";
 import type { Plugin } from "vite";
 import type { IncomingMessage, ServerResponse } from "node:http";
 
+const MODEL_CANDIDATES = ["gemini-3.6-flash", "gemini-2.5-flash", "gemini-2.5-pro"];
+
 function devAssistantPlugin(): Plugin {
   let apiKey = "";
   return {
@@ -14,6 +16,37 @@ function devAssistantPlugin(): Plugin {
       apiKey = env.GOOGLE_AI_API_KEY || env.GEMINI_API_KEY || "";
     },
     configureServer(server) {
+      const requestGeminiWithFallback = async (payload: string): Promise<Response> => {
+        let lastDetail = "No Gemini response";
+
+        for (const model of MODEL_CANDIDATES) {
+          const res = await fetch(
+            `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(apiKey)}`,
+            {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: payload,
+            }
+          );
+
+          if (res.ok) return res;
+
+          const detail = await res.text();
+          lastDetail = `${model}: ${detail}`;
+          const shouldTryNext =
+            res.status === 404 ||
+            detail.includes("no longer available") ||
+            detail.includes("is not found") ||
+            detail.includes("not supported");
+
+          if (!shouldTryNext) {
+            throw new Error(lastDetail);
+          }
+        }
+
+        throw new Error(lastDetail);
+      };
+
       server.middlewares.use(
         "/api/assistant",
         async (req: IncomingMessage, res: ServerResponse) => {
@@ -77,31 +110,17 @@ function devAssistantPlugin(): Plugin {
               `Tasks (first 50): ${JSON.stringify(tasks.slice(0, 50))}`,
             ].join("\n\n");
 
-            const geminiRes = await fetch(
-              `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent?key=${encodeURIComponent(apiKey)}`,
-              {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                  contents: [
-                    {
-                      role: "user",
-                      parts: [{ text: `${systemInstruction}\n\n${userPrompt}` }],
-                    },
-                  ],
-                  generationConfig: { temperature: 0.2 },
-                }),
-              }
+            const geminiRes = await requestGeminiWithFallback(
+              JSON.stringify({
+                contents: [
+                  {
+                    role: "user",
+                    parts: [{ text: `${systemInstruction}\n\n${userPrompt}` }],
+                  },
+                ],
+                generationConfig: { temperature: 0.2 },
+              })
             );
-
-            if (!geminiRes.ok) {
-              const detail = await geminiRes.text();
-              res.writeHead(502, { "Content-Type": "application/json" });
-              res.end(
-                JSON.stringify({ error: "Gemini request failed", detail })
-              );
-              return;
-            }
 
             const geminiJson = (await geminiRes.json()) as {
               candidates?: Array<{

@@ -1,12 +1,18 @@
-import { defineConfig } from "vite";
+import { defineConfig, loadEnv } from "vite";
 import react from "@vitejs/plugin-react";
 import type { Plugin } from "vite";
 import type { IncomingMessage, ServerResponse } from "node:http";
 
 function devAssistantPlugin(): Plugin {
+  let apiKey = "";
   return {
     name: "dev-assistant-api",
     apply: "serve",
+    config(_, { mode }) {
+      // Load ALL env vars (no prefix filter) so server-only keys are available
+      const env = loadEnv(mode, process.cwd(), "");
+      apiKey = env.GOOGLE_AI_API_KEY || env.GEMINI_API_KEY || "";
+    },
     configureServer(server) {
       server.middlewares.use(
         "/api/assistant",
@@ -31,8 +37,6 @@ function devAssistantPlugin(): Plugin {
               };
             };
 
-            const apiKey =
-              process.env.GOOGLE_AI_API_KEY || process.env.GEMINI_API_KEY;
             if (!apiKey) {
               res.writeHead(500, { "Content-Type": "application/json" });
               res.end(

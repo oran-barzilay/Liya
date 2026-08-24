@@ -4,6 +4,8 @@ import { usePreferencesStore } from "../state/stores/preferencesStore";
 import { zonedDateTimeToUtcIso } from "../lib/datetime";
 
 type Row = Record<string, any>;
+type Msg = { role: "user" | "assistant"; text: string };
+type MsgUpdater = Msg[] | ((prev: Msg[]) => Msg[]);
 
 type AssistantAction = {
   type?: string;
@@ -42,6 +44,8 @@ export default function AiAssistantCard({
   onAddTask,
   standalone = false,
   initialMessage,
+  messages: externalMessages,
+  onMessagesChange,
 }: {
   inventory: Row[];
   tasks: Row[];
@@ -49,13 +53,26 @@ export default function AiAssistantCard({
   onAddTask: (task: Row) => Promise<void> | void;
   standalone?: boolean;
   initialMessage?: string;
+  messages?: Msg[];
+  onMessagesChange?: (messages: Msg[]) => void;
 }) {
   const timeZone = usePreferencesStore((s) => s.timeZone);
   const [open, setOpen] = useState(standalone);
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
-  const [messages, setMessages] = useState<Array<{ role: "user" | "assistant"; text: string }>>([]);
+  const [internalMessages, setInternalMessages] = useState<Msg[]>([]);
   const sentInitial = useRef(false);
+  const bottomRef = useRef<HTMLDivElement>(null);
+
+  const messages = externalMessages ?? internalMessages;
+  const setMessages = (updater: MsgUpdater) => {
+    const next = typeof updater === "function" ? updater(messages) : updater;
+    if (onMessagesChange) {
+      onMessagesChange(next);
+    } else {
+      setInternalMessages(next);
+    }
+  };
 
   const inventoryContext = useMemo(
     () => inventory.map((i) => ({ name: i.name, quantity: i.quantity, unit: i.unit, critical_threshold: i.critical_threshold, category_id: i.category_id })),
@@ -170,6 +187,10 @@ export default function AiAssistantCard({
   };
 
   useEffect(() => {
+    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages, isLoading]);
+
+  useEffect(() => {
     if (!standalone) return;
     setOpen(true);
   }, [standalone]);
@@ -181,56 +202,93 @@ export default function AiAssistantCard({
     void send(msg);
   }, [standalone, initialMessage, isLoading]);
 
+  const inputRow = (
+    <div className="flex gap-2 p-3 border-t border-slate-800 bg-slate-950/60">
+      <input
+        value={input}
+        onChange={(e) => setInput(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") {
+            e.preventDefault();
+            void send();
+          }
+        }}
+        className="input-base flex-1"
+        placeholder="כתבו בקשה חופשית..."
+        autoFocus={standalone}
+      />
+      <button
+        type="button"
+        onClick={() => void send()}
+        disabled={isLoading || !input.trim()}
+        className="px-3 py-2 rounded-lg bg-accent-600 hover:bg-accent-500 disabled:opacity-50 text-white text-sm shrink-0"
+      >
+        {isLoading ? "חושב..." : "שלח"}
+      </button>
+    </div>
+  );
+
+  if (standalone) {
+    return (
+      <div className="flex flex-col rounded-2xl border border-accent-800/70 bg-accent-950/20 overflow-hidden"
+           style={{ height: "calc(100vh - 12rem)" }}>
+        {/* Messages */}
+        <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-3">
+          {messages.length === 0 && (
+            <p className="text-sm text-theme-muted text-center mt-8">שאל אותי על רשימת הקניות, צור משימה, או כל שאלה אחרת.</p>
+          )}
+          {messages.map((m, idx) => (
+            <div
+              key={idx}
+              className={
+                "max-w-[80%] px-4 py-2.5 rounded-2xl text-sm whitespace-pre-wrap leading-relaxed " +
+                (m.role === "user"
+                  ? "bg-accent-700/80 text-white self-end ms-auto rounded-br-sm"
+                  : "bg-slate-800 text-theme self-start rounded-bl-sm")
+              }
+            >
+              {m.text}
+            </div>
+          ))}
+          {isLoading && (
+            <div className="max-w-[80%] px-4 py-2.5 rounded-2xl bg-slate-800 text-theme-muted text-sm self-start rounded-bl-sm animate-pulse">
+              חושב...
+            </div>
+          )}
+          <div ref={bottomRef} />
+        </div>
+        {/* Input pinned at bottom */}
+        {inputRow}
+      </div>
+    );
+  }
+
   return (
     <section className="mb-5 rounded-2xl border border-accent-800/70 bg-accent-950/20">
-      {!standalone && (
-        <button
-          type="button"
-          onClick={() => setOpen((s) => !s)}
-          className="w-full flex items-center justify-between px-4 py-3 text-right"
-        >
-          <div>
-            <h3 className="text-sm font-semibold text-theme flex items-center gap-2">
-              <Icon name="users" className="w-4 h-4 text-accent-400" />
-              סוכן חכם לקניות ומשימות
-            </h3>
-            <p className="text-xs text-theme-muted mt-1">לדוגמה: "תוסיף חלב וביצים" או "מה חסר לקנייה השבוע?"</p>
-          </div>
-          <Icon name={open ? "chevron-up" : "chevron-down"} className="w-4 h-4 text-theme-muted" />
-        </button>
-      )}
+      <button
+        type="button"
+        onClick={() => setOpen((s) => !s)}
+        className="w-full flex items-center justify-between px-4 py-3 text-right"
+      >
+        <div>
+          <h3 className="text-sm font-semibold text-theme flex items-center gap-2">
+            <Icon name="chat" className="w-4 h-4 text-accent-400" />
+            סוכן חכם לקניות ומשימות
+          </h3>
+          <p className="text-xs text-theme-muted mt-1">לדוגמה: "תוסיף חלב וביצים" או "מה חסר לקנייה השבוע?"</p>
+        </div>
+        <Icon name={open ? "chevron-up" : "chevron-down"} className="w-4 h-4 text-theme-muted" />
+      </button>
 
       {open && (
-        <div className="px-4 pb-4 space-y-3">
-          <div className="max-h-56 overflow-y-auto space-y-2 rounded-xl border border-slate-800 bg-slate-900 p-3">
+        <div className="flex flex-col border-t border-slate-800">
+          <div className="max-h-56 overflow-y-auto p-3 space-y-2">
             {messages.length === 0 && <p className="text-xs text-theme-muted">שאל אותי על רשימת הקניות או בקש ליצור משימה.</p>}
             {messages.map((m, idx) => (
               <div key={idx} className={"text-xs whitespace-pre-wrap " + (m.role === "user" ? "text-accent-300" : "text-theme")}>{m.text}</div>
             ))}
           </div>
-
-          <div className="flex gap-2">
-            <input
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") {
-                  e.preventDefault();
-                  void send();
-                }
-              }}
-              className="input-base flex-1"
-              placeholder="כתבו בקשה חופשית..."
-            />
-            <button
-              type="button"
-              onClick={() => void send()}
-              disabled={isLoading || !input.trim()}
-              className="px-3 py-2 rounded-lg bg-accent-600 hover:bg-accent-500 disabled:opacity-50 text-white text-sm"
-            >
-              {isLoading ? "חושב..." : "שלח"}
-            </button>
-          </div>
+          {inputRow}
         </div>
       )}
     </section>

@@ -6,12 +6,13 @@ import { useThemeStore, getContrastColor } from "../state/stores/themeStore";
 import Icon from "./Icon";
 
 const NAV_ITEMS = [
-  { to: "/",        icon: "home"      as const, label: "היום"      },
-  { to: "/weekly",  icon: "calendar"  as const, label: "שבועי"     },
-  { to: "/tasks",   icon: "tasks"     as const, label: "משימות"   },
-  { to: "/inventory",icon: "inventory"as const, label: "קניות"    },
-  { to: "/baby",    icon: "babies"    as const, label: "תינוקות"  },
-  { to: "/finance", icon: "finance"   as const, label: "כספים"    },
+  { to: "/",          icon: "home"      as const, label: "היום"    },
+  { to: "/weekly",    icon: "calendar"  as const, label: "שבועי"   },
+  { to: "/tasks",     icon: "tasks"     as const, label: "משימות"  },
+  { to: "/inventory", icon: "inventory" as const, label: "קניות"   },
+  { to: "/baby",      icon: "babies"    as const, label: "תינוקות" },
+  { to: "/finance",   icon: "finance"   as const, label: "כספים"   },
+  { to: "/assistant", icon: "chat"      as const, label: "צ'אט"    },
 ] as const;
 
 export default function Layout({ children }: { children: React.ReactNode }) {

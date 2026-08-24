@@ -126,7 +126,7 @@ function devAssistantPlugin(): Plugin {
               /* ignore */
             }
 
-            const reply = parsed?.reply ?? rawText || "בוצע.";
+            const reply = (parsed?.reply ?? rawText) || "בוצע.";
             const actions = Array.isArray(parsed?.actions) ? parsed!.actions : [];
 
             res.writeHead(200, { "Content-Type": "application/json" });

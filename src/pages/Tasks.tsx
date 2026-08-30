@@ -10,11 +10,11 @@ type Task = Record<string, any>;
 type TaskScope = "daily" | "shopping" | "all";
 
 const PRIORITY_BADGE: Record<number, string> = {
-  1: "bg-red-900 text-red-300",
-  2: "bg-orange-900 text-orange-300",
-  3: "bg-amber-900 text-amber-300",
-  4: "bg-blue-900 text-blue-300",
-  5: "bg-slate-800 text-slate-400",
+  1: "badge-danger",
+  2: "badge-warning",
+  3: "badge-warning",
+  4: "badge-info",
+  5: "badge-neutral",
 };
 
 const PRIORITY_LABEL: Record<number, string> = {
@@ -35,10 +35,10 @@ function toUtcIso(val: string, timeZone: string): string | null {
 function relativeDateLabel(iso: string, today: string): { text: string; cls: string } {
   const d = iso.slice(0, 10);
   const diff = Math.round((new Date(d + "T12:00:00").getTime() - new Date(today + "T12:00:00").getTime()) / 86400000);
-  if (diff < 0) return { text: `איחור ${Math.abs(diff)}d`, cls: "text-red-400" };
+  if (diff < 0) return { text: `איחור ${Math.abs(diff)}d`, cls: "text-danger" };
   if (diff === 0) return { text: "היום", cls: "text-accent-400" };
-  if (diff === 1) return { text: "מחר", cls: "text-emerald-400" };
-  if (diff <= 7) return { text: `${diff} ימים`, cls: "text-amber-400" };
+  if (diff === 1) return { text: "מחר", cls: "text-success" };
+  if (diff <= 7) return { text: `${diff} ימים`, cls: "text-warning" };
   return { text: new Date(d + "T12:00:00").toLocaleDateString("he-IL", { day: "numeric", month: "numeric" }), cls: "text-theme-muted" };
 }
 
@@ -427,7 +427,7 @@ export default function Tasks() {
           <button onClick={() => setEditingTask(task)} className="p-1.5 text-slate-600 hover:text-accent-400 rounded-lg hover:bg-slate-800 transition-colors">
             <Icon name="edit" className="w-3.5 h-3.5" />
           </button>
-          <button onClick={() => setPendingDelete(task.id)} className="p-1.5 text-slate-600 hover:text-red-400 rounded-lg hover:bg-slate-800 transition-colors">
+          <button onClick={() => setPendingDelete(task.id)} className="p-1.5 text-slate-600 hover:text-danger rounded-lg hover:bg-slate-800 transition-colors">
             <Icon name="trash" className="w-3.5 h-3.5" />
           </button>
         </div>
@@ -493,13 +493,13 @@ export default function Tasks() {
 
       {/* Shopping alert */}
       {taskScope === "daily" && openShoppingCount > 0 && (
-        <div className="mb-5 rounded-2xl border border-amber-800 bg-amber-950/20 px-4 py-3 flex items-center justify-between gap-3">
+        <div className="mb-5 rounded-2xl border alert-warning px-4 py-3 flex items-center justify-between gap-3">
           <div className="flex items-center gap-2">
-            <Icon name="package" className="w-4 h-4 text-amber-300 shrink-0" />
-            <span className="text-sm text-amber-200">{openShoppingCount} פריטים לקנייה ממתינים</span>
+            <Icon name="package" className="w-4 h-4 text-warning shrink-0" />
+            <span className="text-sm text-warning">{openShoppingCount} פריטים לקנייה ממתינים</span>
           </div>
           <div className="flex gap-2 shrink-0">
-            <button onClick={() => setTaskScope("shopping")} className="px-3 py-1.5 rounded-lg bg-amber-700 hover:bg-amber-600 text-white text-xs font-medium">הצג</button>
+              <button onClick={() => setTaskScope("shopping")} className="px-3 py-1.5 rounded-lg bg-accent-600 hover:bg-accent-500 text-white text-xs font-medium">הצג</button>
             <button onClick={() => navigate("/inventory")} className="px-3 py-1.5 rounded-lg bg-slate-800 border border-slate-700 hover:bg-slate-700 text-theme text-xs">לרשימה</button>
           </div>
         </div>
@@ -550,7 +550,7 @@ export default function Tasks() {
         <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4">
           <div className="w-full max-w-sm rounded-2xl border border-slate-700 bg-slate-900 p-5">
             <div className="flex items-center gap-2 mb-1">
-              <Icon name="warning" className="w-5 h-5 text-red-400" />
+              <Icon name="warning" className="w-5 h-5 text-danger" />
               <h3 className="text-base font-semibold text-theme">למחוק משימה זו?</h3>
             </div>
             <p className="text-sm text-theme-muted mt-1">הפעולה אינה ניתנת לביטול.</p>

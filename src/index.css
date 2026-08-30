@@ -22,6 +22,16 @@
   --surface-800: #1e293b;
   --surface-700: #334155;
   --surface-border: #1f2937;
+  --status-danger-text: #f87171;
+  --status-danger-bg: #7f1d1d;
+  --status-success-text: #34d399;
+  --status-success-bg: #065f46;
+  --status-warning-text: #fbbf24;
+  --status-warning-bg: #78350f;
+  --status-info-text: #93c5fd;
+  --status-info-bg: #1e3a8a;
+  --status-neutral-text: #94a3b8;
+  --status-neutral-bg: #1e293b;
 }
 
 [data-surface="light"] {
@@ -31,6 +41,16 @@
   --surface-800: #f2eee4;
   --surface-700: #e7dfcf;
   --surface-border: #ddd6c7;
+  --status-danger-text: #b42318;
+  --status-danger-bg: #fde8e8;
+  --status-success-text: #166534;
+  --status-success-bg: #dcfce7;
+  --status-warning-text: #92400e;
+  --status-warning-bg: #fef3c7;
+  --status-info-text: #1d4ed8;
+  --status-info-bg: #dbeafe;
+  --status-neutral-text: #475569;
+  --status-neutral-bg: #e2e8f0;
 }
 
 [data-accent="purple"] {
@@ -181,5 +201,37 @@ select option {
   }
   .btn-accent:hover {
     @apply bg-accent-500;
+  }
+
+  .text-danger {
+    color: var(--status-danger-text);
+  }
+  .text-success {
+    color: var(--status-success-text);
+  }
+  .text-warning {
+    color: var(--status-warning-text);
+  }
+
+  .badge-danger {
+    background-color: var(--status-danger-bg);
+    color: var(--status-danger-text);
+  }
+  .badge-warning {
+    background-color: var(--status-warning-bg);
+    color: var(--status-warning-text);
+  }
+  .badge-info {
+    background-color: var(--status-info-bg);
+    color: var(--status-info-text);
+  }
+  .badge-neutral {
+    background-color: var(--status-neutral-bg);
+    color: var(--status-neutral-text);
+  }
+
+  .alert-warning {
+    border-color: var(--status-warning-text);
+    background-color: color-mix(in srgb, var(--status-warning-bg) 72%, transparent);
   }
 }

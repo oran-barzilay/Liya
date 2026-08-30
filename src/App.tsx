@@ -2,7 +2,7 @@ import { useEffect } from "react";
 import { Routes, Route, Navigate, useNavigate } from "react-router-dom";
 import { useAuth } from "./contexts/AuthContext";
 import { useProfile } from "./hooks/useProfile";
-import { useThemeStore } from "./state/stores/themeStore";
+import { getContrastColor, useThemeStore } from "./state/stores/themeStore";
 import Layout from "./components/Layout";
 import Login from "./pages/Login";
 import Setup from "./pages/Setup";
@@ -33,6 +33,7 @@ function AppRoutes() {
   useEffect(() => {
     const root = document.documentElement;
     root.setAttribute("data-accent", accentColor);
+    root.setAttribute("data-surface", getContrastColor(appBg) === "dark" ? "light" : "dark");
     root.style.setProperty("--app-bg", appBg);
     root.style.setProperty("--menu-bg", menuBg);
     root.style.setProperty("--text-primary", textPrimary);

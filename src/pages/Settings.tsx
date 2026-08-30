@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
-import { useThemeStore, ACCENT_OPTIONS, THEME_PRESETS, getContrastColor } from "../state/stores/themeStore";
+import { useThemeStore, ACCENT_OPTIONS, THEME_PRESETS, contrastRatio } from "../state/stores/themeStore";
 import { useProfile } from "../hooks/useProfile";
 import { useChildren } from "../hooks/useBaby";
 import Icon from "../components/Icon";
@@ -181,9 +181,7 @@ export default function Settings() {
   };
 
   // Warn if text on background has low contrast
-  const appContrast = getContrastColor(appBg);
-  const textLum = getContrastColor(textPrimary);
-  const textOnBgWarning = (appContrast === "dark" && textLum === "dark") || (appContrast === "light" && textLum === "light");
+  const textOnBgWarning = contrastRatio(textPrimary, appBg) < 4.5 || contrastRatio(textMuted, appBg) < 3;
 
   return (
     <div>

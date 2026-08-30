@@ -2,6 +2,7 @@ export const config = { runtime: "edge" };
 
 type AssistantRequest = {
   message?: string;
+  model?: string;
   context?: {
     inventory?: Array<Record<string, unknown>>;
     tasks?: Array<Record<string, unknown>>;
@@ -10,6 +11,77 @@ type AssistantRequest = {
 };
 
 const MODEL_CANDIDATES = ["gemini-3.6-flash", "gemini-2.5-flash", "gemini-2.5-pro"];
+
+type GoogleModel = {
+  name?: string;
+  supportedGenerationMethods?: string[];
+};
+
+function parseGeminiVersion(model: string): { major: number; minor: number } {
+  const match = model.match(/gemini-(\d+)(?:\.(\d+))?/i);
+  return {
+    major: match?.[1] ? Number(match[1]) : 0,
+    minor: match?.[2] ? Number(match[2]) : 0,
+  };
+}
+
+function rankModelForSpeedAndFreshness(model: string): number {
+  const normalized = model.toLowerCase();
+  const { major, minor } = parseGeminiVersion(normalized);
+  const versionScore = major * 100 + minor;
+  const isFlash = normalized.includes("-flash");
+  const isPro = normalized.includes("-pro");
+  const isPreview = normalized.includes("preview") || normalized.includes("exp");
+
+  let score = versionScore;
+  if (isFlash) score += 10_000;
+  if (isPro) score -= 500;
+  if (isPreview) score -= 5;
+  return score;
+}
+
+function getRecommendedModel(models: string[]): string {
+  const sorted = [...models].sort((a, b) => rankModelForSpeedAndFreshness(b) - rankModelForSpeedAndFreshness(a));
+  return sorted[0] ?? MODEL_CANDIDATES[0];
+}
+
+function normalizeModelName(name: string): string {
+  return name.startsWith("models/") ? name.slice("models/".length) : name;
+}
+
+function buildModelOrder(preferredModel: string | null, availableModels: string[]): string[] {
+  const unique = new Set<string>();
+  const recommendedModel = getRecommendedModel(availableModels.length ? availableModels : MODEL_CANDIDATES);
+  const ordered = [preferredModel, recommendedModel, ...availableModels, ...MODEL_CANDIDATES].filter(Boolean) as string[];
+  for (const model of ordered) {
+    unique.add(normalizeModelName(model));
+  }
+  return Array.from(unique);
+}
+
+async function fetchAvailableGeminiModels(apiKey: string): Promise<string[]> {
+  const res = await fetch(
+    `https://generativelanguage.googleapis.com/v1beta/models?key=${encodeURIComponent(apiKey)}`,
+    { method: "GET" }
+  );
+  if (!res.ok) return MODEL_CANDIDATES;
+  const data = (await res.json()) as { models?: GoogleModel[] };
+  const list = (data.models ?? [])
+    .filter((m) => m.name && (m.supportedGenerationMethods ?? []).includes("generateContent"))
+    .map((m) => normalizeModelName(String(m.name)))
+    .filter((name) => name.startsWith("gemini-"));
+  return list.length ? list : MODEL_CANDIDATES;
+}
+
+function isTransientModelError(status: number, detail: string): boolean {
+  return (
+    status === 429 ||
+    status === 503 ||
+    detail.includes("high demand") ||
+    detail.includes("UNAVAILABLE") ||
+    detail.includes("temporarily")
+  );
+}
 
 function safeJsonParse<T>(text: string): T | null {
   try {
@@ -28,10 +100,16 @@ function extractJson(text: string): string {
   return text.trim();
 }
 
-async function requestGeminiWithFallback(apiKey: string, body: string): Promise<Response> {
+async function requestGeminiWithFallback(
+  apiKey: string,
+  body: string,
+  preferredModel: string | null,
+  availableModels: string[]
+): Promise<Response> {
   let lastDetail = "No Gemini response";
+  const modelOrder = buildModelOrder(preferredModel, availableModels);
 
-  for (const model of MODEL_CANDIDATES) {
+  for (const model of modelOrder) {
     const res = await fetch(
       `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(apiKey)}`,
       {
@@ -47,6 +125,7 @@ async function requestGeminiWithFallback(apiKey: string, body: string): Promise<
     lastDetail = `${model}: ${detail}`;
     const shouldTryNext =
       res.status === 404 ||
+      isTransientModelError(res.status, detail) ||
       detail.includes("no longer available") ||
       detail.includes("is not found") ||
       detail.includes("not supported");
@@ -61,13 +140,6 @@ async function requestGeminiWithFallback(apiKey: string, body: string): Promise<
 
 export default async function handler(req: Request): Promise<Response> {
   try {
-    if (req.method !== "POST") {
-      return new Response(JSON.stringify({ error: "Method not allowed" }), {
-        status: 405,
-        headers: { "Content-Type": "application/json" },
-      });
-    }
-
     const apiKey = process.env.GOOGLE_AI_API_KEY || process.env.GEMINI_API_KEY;
     if (!apiKey) {
       return new Response(
@@ -79,8 +151,25 @@ export default async function handler(req: Request): Promise<Response> {
       );
     }
 
+    if (req.method === "GET") {
+      const models = await fetchAvailableGeminiModels(apiKey).catch(() => MODEL_CANDIDATES);
+      const defaultModel = getRecommendedModel(models);
+      return new Response(JSON.stringify({ models, defaultModel, recommendedModel: defaultModel }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      });
+    }
+
+    if (req.method !== "POST") {
+      return new Response(JSON.stringify({ error: "Method not allowed" }), {
+        status: 405,
+        headers: { "Content-Type": "application/json" },
+      });
+    }
+
     const body = (await req.json().catch(() => ({}))) as AssistantRequest;
     const message = String(body.message ?? "").trim();
+    const preferredModel = String(body.model ?? "").trim() || null;
     if (!message) {
       return new Response(JSON.stringify({ error: "message is required" }), {
         status: 400,
@@ -91,6 +180,7 @@ export default async function handler(req: Request): Promise<Response> {
     const inventory = Array.isArray(body.context?.inventory) ? body.context?.inventory : [];
     const tasks = Array.isArray(body.context?.tasks) ? body.context?.tasks : [];
     const appointments = Array.isArray(body.context?.appointments) ? body.context?.appointments : [];
+    const availableModels = await fetchAvailableGeminiModels(apiKey).catch(() => MODEL_CANDIDATES);
 
     const systemInstruction = [
     "You are a Hebrew assistant for a family household app.",
@@ -128,7 +218,9 @@ export default async function handler(req: Request): Promise<Response> {
       JSON.stringify({
         contents: [{ role: "user", parts: [{ text: `${systemInstruction}\n\n${userPrompt}` }] }],
         generationConfig: { temperature: 0.2 },
-      })
+      }),
+      preferredModel,
+      availableModels
     );
 
     const geminiJson = (await geminiRes.json()) as {
@@ -152,8 +244,9 @@ export default async function handler(req: Request): Promise<Response> {
     });
   } catch (error) {
     const detail = error instanceof Error ? error.message : "Unknown server error";
+    const status = detail.includes("UNAVAILABLE") || detail.includes("high demand") ? 503 : 500;
     return new Response(JSON.stringify({ error: "Assistant server failure", detail }), {
-      status: 500,
+      status,
       headers: { "Content-Type": "application/json" },
     });
   }

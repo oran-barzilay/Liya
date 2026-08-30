@@ -16,14 +16,18 @@ export const TIMEZONE_OPTIONS = [
 
 interface PreferencesState {
   timeZone: string;
+  assistantModel: string;
   setTimeZone: (timeZone: string) => void;
+  setAssistantModel: (assistantModel: string) => void;
 }
 
 export const usePreferencesStore = create<PreferencesState>()(
   persist(
     (set) => ({
       timeZone: DEFAULT_TIMEZONE,
+      assistantModel: "",
       setTimeZone: (timeZone) => set({ timeZone: timeZone.trim() || DEFAULT_TIMEZONE }),
+      setAssistantModel: (assistantModel) => set({ assistantModel: assistantModel.trim() }),
     }),
     { name: "fami-preferences" }
   )

@@ -12,6 +12,8 @@ type AssistantAction = {
   payload?: Record<string, unknown>;
 };
 
+const FALLBACK_MODELS = ["gemini-3.6-flash", "gemini-2.5-flash", "gemini-2.5-pro"];
+
 function getNextOccurrence(days: number[], time: string): string | null {
   if (!days.length) return null;
   const [h, m] = (time || "09:00").split(":").map(Number);
@@ -52,6 +54,7 @@ export default function AiAssistantCard({
   onAddEvent,
   onShiftTaskSchedule,
   onShiftEventSchedule,
+  preferredModel = "",
   standalone = false,
   initialMessage,
   messages: externalMessages,
@@ -65,15 +68,22 @@ export default function AiAssistantCard({
   onAddEvent: (event: Row) => Promise<void> | void;
   onShiftTaskSchedule: (payload: Row) => Promise<void> | void;
   onShiftEventSchedule: (payload: Row) => Promise<void> | void;
+  preferredModel?: string;
   standalone?: boolean;
   initialMessage?: string;
   messages?: Msg[];
   onMessagesChange?: (messages: Msg[]) => void;
 }) {
   const timeZone = usePreferencesStore((s) => s.timeZone);
+  const assistantModel = usePreferencesStore((s) => s.assistantModel);
+  const setAssistantModel = usePreferencesStore((s) => s.setAssistantModel);
   const [open, setOpen] = useState(standalone);
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [isLoadingModels, setIsLoadingModels] = useState(false);
+  const [availableModels, setAvailableModels] = useState<string[]>([]);
+  const [recommendedModel, setRecommendedModel] = useState("");
+  const [modelLoadFailed, setModelLoadFailed] = useState(false);
   const [internalMessages, setInternalMessages] = useState<Msg[]>([]);
   const sentInitial = useRef(false);
   const bottomRef = useRef<HTMLDivElement>(null);
@@ -100,6 +110,43 @@ export default function AiAssistantCard({
     () => appointments.map((a) => ({ title: a.title, starts_at: a.starts_at, provider_name: a.provider_name, location: a.location, status: a.status })),
     [appointments]
   );
+
+  const selectableModels = useMemo(() => {
+    const merged = [assistantModel, recommendedModel, ...availableModels, ...FALLBACK_MODELS]
+      .map((m) => String(m || "").trim())
+      .filter(Boolean);
+    return Array.from(new Set(merged));
+  }, [assistantModel, recommendedModel, availableModels]);
+
+  const loadModels = async () => {
+    setIsLoadingModels(true);
+    try {
+      const res = await fetch("/api/assistant", { method: "GET" });
+      const data = (await res.json().catch(() => ({}))) as { models?: unknown[]; defaultModel?: string; recommendedModel?: string };
+      if (!res.ok) {
+        setModelLoadFailed(true);
+        setAvailableModels(FALLBACK_MODELS);
+        if (!assistantModel) setAssistantModel(FALLBACK_MODELS[0]);
+        return;
+      }
+      const models = Array.isArray(data.models)
+        ? data.models.map((m) => String(m)).filter((m) => m.trim().length > 0)
+        : FALLBACK_MODELS;
+      const recommended = String(data.recommendedModel ?? data.defaultModel ?? models[0] ?? FALLBACK_MODELS[0]);
+      setModelLoadFailed(false);
+      setAvailableModels(models.length ? models : FALLBACK_MODELS);
+      setRecommendedModel(recommended);
+      if (!assistantModel) {
+        setAssistantModel(recommended || FALLBACK_MODELS[0]);
+      }
+    } catch {
+      setModelLoadFailed(true);
+      setAvailableModels(FALLBACK_MODELS);
+      if (!assistantModel) setAssistantModel(FALLBACK_MODELS[0]);
+    } finally {
+      setIsLoadingModels(false);
+    }
+  };
 
   const runAction = async (action: AssistantAction) => {
     const payload = action.payload ?? {};
@@ -189,11 +236,13 @@ export default function AiAssistantCard({
     setIsLoading(true);
 
     try {
+      const outgoingModel = assistantModel || preferredModel || undefined;
       const res = await fetch("/api/assistant", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           message,
+          model: outgoingModel,
           context: {
             inventory: inventoryContext,
             tasks: taskContext,
@@ -250,8 +299,45 @@ export default function AiAssistantCard({
     void send(msg);
   }, [standalone, initialMessage, isLoading]);
 
+  useEffect(() => {
+    void loadModels();
+  }, []);
+
+  useEffect(() => {
+    if (!assistantModel && preferredModel) {
+      setAssistantModel(preferredModel);
+    }
+  }, [assistantModel, preferredModel, setAssistantModel]);
+
   const inputRow = (
-    <div className="flex gap-2 p-3 border-t border-slate-800 bg-slate-950/60">
+    <div className="flex flex-col sm:flex-row gap-2 p-3 border-t border-slate-800 bg-slate-950/60">
+      <div className="flex items-center gap-2 sm:max-w-[320px]">
+        <select
+          value={assistantModel}
+          onChange={(e) => setAssistantModel(e.target.value)}
+          className="input-base min-w-0 text-xs"
+          title="בחירת מודל"
+        >
+          {!assistantModel && <option value="">מודל אוטומטי</option>}
+          {selectableModels.map((model) => (
+            <option key={model} value={model}>
+              {model}{model === recommendedModel ? " (מומלץ)" : ""}
+            </option>
+          ))}
+        </select>
+        <button
+          type="button"
+          onClick={() => void loadModels()}
+          className="px-2 py-2 rounded-lg border border-slate-700 text-theme-muted hover:text-theme hover:border-slate-500 text-xs shrink-0"
+          disabled={isLoadingModels}
+          title="רענון רשימת מודלים"
+        >
+          {isLoadingModels ? "..." : "רענן"}
+        </button>
+      </div>
+      {modelLoadFailed && (
+        <span className="text-[11px] text-amber-300 self-center sm:self-auto">לא נטענה רשימת מודלים מהשרת, מוצגת רשימת ברירת מחדל.</span>
+      )}
       <input
         value={input}
         onChange={(e) => setInput(e.target.value)}

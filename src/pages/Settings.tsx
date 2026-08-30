@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useThemeStore, ACCENT_OPTIONS, THEME_PRESETS, getContrastColor } from "../state/stores/themeStore";
 import { useProfile } from "../hooks/useProfile";
@@ -9,6 +9,9 @@ import { supabase } from "../lib/supabase";
 import { useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "../contexts/AuthContext";
 import { TIMEZONE_OPTIONS, usePreferencesStore } from "../state/stores/preferencesStore";
+import { useHouseholdSettings } from "../hooks/useHouseholdSettings";
+
+const FALLBACK_MODELS = ["gemini-3.6-flash", "gemini-2.5-flash", "gemini-2.5-pro"];
 
 export default function Settings() {
   const {
@@ -31,7 +34,8 @@ export default function Settings() {
     applyPalette,
     removePalette,
   } = useThemeStore();
-  const { timeZone, setTimeZone } = usePreferencesStore();
+  const { timeZone, setTimeZone, assistantModel, setAssistantModel } = usePreferencesStore();
+  const { data: householdSettings, setAssistantModelForHousehold } = useHouseholdSettings();
   const { user } = useAuth();
   const qc = useQueryClient();
   const { data: profile } = useProfile();
@@ -89,6 +93,63 @@ export default function Settings() {
   const [changeError, setChangeError] = useState("");
   const [changeSuccess, setChangeSuccess] = useState(false);
   const [customTimeZone, setCustomTimeZone] = useState("");
+  const [availableModels, setAvailableModels] = useState<string[]>(FALLBACK_MODELS);
+  const [recommendedModel, setRecommendedModel] = useState(FALLBACK_MODELS[0]);
+  const [modelsError, setModelsError] = useState("");
+  const [saveModelSuccess, setSaveModelSuccess] = useState(false);
+
+  const selectedFamilyModel = assistantModel || householdSettings?.assistant_model || recommendedModel;
+  const modelOptions = useMemo(() => {
+    const merged = [householdSettings?.assistant_model, assistantModel, recommendedModel, ...availableModels, ...FALLBACK_MODELS]
+      .map((m) => String(m ?? "").trim())
+      .filter(Boolean);
+    return Array.from(new Set(merged));
+  }, [householdSettings?.assistant_model, assistantModel, recommendedModel, availableModels]);
+
+  const loadModels = async () => {
+    try {
+      setModelsError("");
+      const res = await fetch("/api/assistant", { method: "GET" });
+      const data = (await res.json().catch(() => ({}))) as { models?: unknown[]; defaultModel?: string; recommendedModel?: string };
+      if (!res.ok) {
+        setModelsError("לא הצלחתי לטעון מודלים כרגע, מוצגת רשימת ברירת מחדל.");
+        return;
+      }
+      const models = Array.isArray(data.models)
+        ? data.models.map((m) => String(m)).filter((m) => m.trim().length > 0)
+        : [];
+      const recommended = String(data.recommendedModel ?? data.defaultModel ?? models[0] ?? FALLBACK_MODELS[0]);
+      setAvailableModels(models.length ? models : FALLBACK_MODELS);
+      setRecommendedModel(recommended);
+    } catch {
+      setModelsError("לא הצלחתי לטעון מודלים כרגע, מוצגת רשימת ברירת מחדל.");
+    }
+  };
+
+  const saveFamilyModel = async () => {
+    const modelToSave = String(selectedFamilyModel || "").trim();
+    if (!modelToSave || !profile?.household_id) return;
+    setSaveModelSuccess(false);
+    setAssistantModel(modelToSave);
+    try {
+      await setAssistantModelForHousehold.mutateAsync(modelToSave);
+      setSaveModelSuccess(true);
+      setTimeout(() => setSaveModelSuccess(false), 3000);
+    } catch {
+      /* handled by mutation error display */
+    }
+  };
+
+  useEffect(() => {
+    void loadModels();
+  }, []);
+
+  useEffect(() => {
+    const familyModel = String(householdSettings?.assistant_model ?? "").trim();
+    if (familyModel) {
+      setAssistantModel(familyModel);
+    }
+  }, [householdSettings?.assistant_model, setAssistantModel]);
 
   const handleChangeHousehold = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -362,6 +423,49 @@ export default function Settings() {
               </button>
             </div>
             <p className="text-[11px] text-theme-muted mt-1 opacity-70">הגדרה נוכחית: {timeZone}</p>
+          </div>
+
+          <div className="py-2 border-b border-slate-800">
+            <label className="text-sm text-theme-muted block mb-1">מודל סוכן מועדף לכל המשפחה</label>
+            <p className="text-xs text-theme-muted opacity-80 mb-2">
+              ההגדרה נשמרת ברמת הבית המשותף וכל בני המשפחה ישתמשו במודל זה כברירת מחדל.
+            </p>
+            <div className="flex flex-col sm:flex-row gap-2">
+              <select
+                value={selectedFamilyModel}
+                onChange={(e) => setAssistantModel(e.target.value)}
+                className="input-base flex-1 text-sm"
+              >
+                {modelOptions.map((model) => (
+                  <option key={model} value={model}>
+                    {model}{model === recommendedModel ? " (מומלץ)" : ""}
+                  </option>
+                ))}
+              </select>
+              <button
+                type="button"
+                onClick={() => void loadModels()}
+                className="text-xs px-3 py-2 rounded-lg bg-slate-800 text-theme-muted hover:bg-slate-700"
+              >
+                רענון מודלים
+              </button>
+              <button
+                type="button"
+                onClick={() => void saveFamilyModel()}
+                disabled={setAssistantModelForHousehold.isPending || !selectedFamilyModel || !profile?.household_id}
+                className="text-xs px-3 py-2 rounded-lg bg-accent-600 text-white hover:bg-accent-500 disabled:opacity-50"
+              >
+                {setAssistantModelForHousehold.isPending ? "שומר..." : "שמור לכל המשפחה"}
+              </button>
+            </div>
+            {!!householdSettings?.assistant_model && (
+              <p className="text-[11px] text-theme-muted mt-2 opacity-80">מודל משפחתי שמור: {householdSettings.assistant_model}</p>
+            )}
+            {modelsError && <p className="text-[11px] text-amber-300 mt-1">{modelsError}</p>}
+            {setAssistantModelForHousehold.isError && (
+              <p className="text-[11px] text-red-300 mt-1">{setAssistantModelForHousehold.error instanceof Error ? setAssistantModelForHousehold.error.message : "שגיאה בשמירת מודל משפחתי"}</p>
+            )}
+            {saveModelSuccess && <p className="text-[11px] text-emerald-300 mt-1">נשמר מודל מועדף לכל המשפחה.</p>}
           </div>
         </div>
       </section>

@@ -5,6 +5,7 @@ import { useInventory } from "../hooks/useInventory";
 import { useTasks } from "../hooks/useTasks";
 import { useAppointments } from "../hooks/useBaby";
 import { useChatHistory } from "../hooks/useChatHistory";
+import { useHouseholdSettings } from "../hooks/useHouseholdSettings";
 import Icon from "../components/Icon";
 
 function normalizeTitle(val: string): string {
@@ -26,6 +27,7 @@ export default function Assistant() {
   const { data: inventory = [], upsertItem } = useInventory();
   const { data: tasks = [], createTask, updateTask } = useTasks();
   const { data: appointments = [], upsertAppointment } = useAppointments();
+  const { data: householdSettings } = useHouseholdSettings();
 
   const {
     conversations,
@@ -245,6 +247,7 @@ export default function Assistant() {
               key={activeConversation.id}
               standalone
               initialMessage={pendingInitialMessage || undefined}
+              preferredModel={householdSettings?.assistant_model || ""}
               inventory={inventory as Array<Record<string, any>>}
               tasks={tasks as Array<Record<string, any>>}
               appointments={appointments as Array<Record<string, any>>}

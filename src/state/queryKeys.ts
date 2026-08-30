@@ -19,5 +19,6 @@ export const queryKeys = {
     ["analytics", householdId, months] as const,
   dashboard: (householdId: UUID, date: string) =>
     ["dashboard", householdId, date] as const,
+  householdSettings: (householdId: UUID) => ["household_settings", householdId] as const,
 };
 

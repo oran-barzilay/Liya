@@ -275,14 +275,14 @@ export default function Inventory() {
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-5">
+      <div className="flex flex-wrap items-center justify-between gap-2 mb-5">
         <div>
           <h2 className="text-2xl font-bold text-theme">קניות ומלאי</h2>
           <p className="text-theme-muted text-sm mt-0.5">
             {items.length} מוצרים במעקב · <span className="text-red-400">{lowStock.length} חסרים לקנייה</span>
           </p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2 w-full sm:w-auto">
           <button
             onClick={() => setViewMode((prev) => prev === "grouped" ? "flat" : "grouped")}
             className="text-sm font-medium px-3 py-2 rounded-lg bg-slate-900 border border-slate-800 text-theme-muted hover:text-theme flex items-center gap-1.5"
@@ -296,7 +296,7 @@ export default function Inventory() {
             <Icon name="tag" className="w-3.5 h-3.5" /> קטגוריות
           </button>
           <button onClick={() => setModal({ open: true })}
-            className="bg-accent-600 hover:bg-accent-500 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors flex items-center gap-1.5">
+            className="w-full sm:w-auto bg-accent-600 hover:bg-accent-500 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors flex items-center justify-center gap-1.5">
             <Icon name="plus" className="w-3.5 h-3.5" /> הוסף מוצר
           </button>
         </div>
@@ -369,16 +369,16 @@ export default function Inventory() {
         </div>
       )}
       <div className="flex flex-wrap gap-2 mb-5">
-        <div className="relative min-w-60 flex-1 max-w-sm">
+        <div className="relative min-w-0 flex-1 sm:max-w-sm">
           <Icon name="search" className="w-4 h-4 absolute right-3 top-1/2 -translate-y-1/2 text-theme-muted pointer-events-none" />
           <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="חפש פריטים..." className="input-base w-full pr-9" />
         </div>
-        <select value={stockFilter} onChange={(e) => setStockFilter(e.target.value as "all" | "low" | "threshold")} className="input-base text-sm">
+        <select value={stockFilter} onChange={(e) => setStockFilter(e.target.value as "all" | "low" | "threshold")} className="input-base text-sm flex-1 sm:flex-none">
           <option value="all">כל הפריטים</option>
           <option value="low">מלאי נמוך</option>
           <option value="threshold">על הסף</option>
         </select>
-        <select value={sortMode} onChange={(e) => setSortMode(e.target.value as "name" | "low_first" | "threshold_first")} className="input-base text-sm">
+        <select value={sortMode} onChange={(e) => setSortMode(e.target.value as "name" | "low_first" | "threshold_first")} className="input-base text-sm flex-1 sm:flex-none">
           <option value="name">מיון לפי שם</option>
           <option value="low_first">נמוך קודם</option>
           <option value="threshold_first">על הסף קודם</option>
@@ -427,8 +427,8 @@ export default function Inventory() {
           {/* Header row */}
           <div className="flex items-center gap-2 px-3 py-2 bg-slate-900 border-b border-slate-800 text-xs text-theme-muted font-semibold select-none">
             <span className="flex-1">שם פריט</span>
-            <span className="hidden sm:block w-32 text-center">קטגוריה</span>
-            <span className="w-32 text-center">כמות</span>
+            <span className="hidden md:block w-32 text-center">קטגוריה</span>
+            <span className="w-24 sm:w-32 text-center">כמות</span>
             <span className="hidden sm:block w-20 text-center">סף</span>
             <span className="w-2" />
             <span className="w-12" />

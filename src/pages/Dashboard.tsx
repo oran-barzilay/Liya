@@ -235,7 +235,7 @@ export default function Dashboard() {
       </section>
 
 
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 mb-8">
         <StatCard icon={<Icon name="clock" className="w-6 h-6" />} label="משימות מתוזמנות היום" value={todayTimeSensitive.length} sub={openEverydayTasks.length + " משימות פתוחות"} color="accent" onClick={() => navigate("/tasks")} />
         <StatCard icon={<Icon name="package" className="w-6 h-6" />} label="פריטים לקנייה" value={lowStock.length}
           sub={lowStock.slice(0, 2).map(i => i.name).join(", ") || "הכל תקין"} color={lowStock.length > 0 ? "red" : "emerald"} onClick={() => navigate("/inventory")} />

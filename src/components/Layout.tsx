@@ -165,9 +165,9 @@ export default function Layout({ children }: { children: React.ReactNode }) {
         <div className="md:hidden fixed inset-0 z-50 flex">
           {/* Backdrop */}
           <div className="absolute inset-0 bg-black/60" onClick={() => setMobileOpen(false)} />
-          {/* Drawer panel — slides in from the inline-end side (right in RTL) */}
+          {/* Drawer panel — anchored to physical right side */}
           <aside
-            className={`relative z-10 flex flex-col w-72 ms-auto border-s ${menuBorder}`}
+            className={`absolute inset-y-0 right-0 z-10 flex flex-col w-72 max-w-[92vw] border-s ${menuBorder}`}
             style={{ backgroundColor: menuBg }}
           >
             {/* Header */}
@@ -216,7 +216,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
           MAIN CONTENT
       ════════════════════════════════════════ */}
       <main className="flex-1 overflow-y-auto pt-14 pb-16 md:pt-0 md:pb-0">
-        <div className="p-4 md:p-6 max-w-6xl mx-auto">{children}</div>
+        <div className="p-3 sm:p-4 md:p-6 max-w-6xl mx-auto">{children}</div>
       </main>
 
       {/* ════════════════════════════════════════

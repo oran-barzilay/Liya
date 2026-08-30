@@ -92,15 +92,15 @@ function ManualTab({ categories, profile, members }: { categories: Row[]; profil
   const filtered = filterOwner === "all" ? txs : txs.filter((t) => t.owner_user_id === filterOwner);
   return (
     <div>
-      <div className="flex items-center justify-between mb-5">
-        <div className="flex items-center gap-2">
+      <div className="flex flex-wrap items-center justify-between gap-2 mb-5">
+        <div className="flex items-center gap-2 min-w-0">
           <AppCalendar value={month + "-01"} onChange={(d) => setMonth(d.slice(0,7))} placeholder="בחר חודש" />
         </div>
-        <button onClick={() => setModal(true)} className="bg-accent-600 hover:bg-accent-500 text-white text-sm font-medium px-4 py-2 rounded-lg flex items-center gap-1.5">
+        <button onClick={() => setModal(true)} className="w-full sm:w-auto bg-accent-600 hover:bg-accent-500 text-white text-sm font-medium px-4 py-2 rounded-lg flex items-center justify-center gap-1.5">
           <Icon name="plus" className="w-3.5 h-3.5" /> הוסף תנועה
         </button>
       </div>
-      <div className="grid grid-cols-3 gap-4 mb-5">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-5">
         {[{l:"הכנסות",v:totals.income,c:"emerald"},{l:"הוצאות",v:totals.expenses,c:"red"},{l:"מאזן",v:balance,c:balance>=0?"emerald":"red"}].map(({l,v,c})=>(
           <div key={l} className={`bg-${c}-950/40 border border-${c}-800 rounded-xl p-4`}>
             <div className={`text-xs text-${c}-400 font-medium mb-1`}>{l}</div>
@@ -127,7 +127,7 @@ function ManualTab({ categories, profile, members }: { categories: Row[]; profil
             <span className={"font-semibold text-sm " + (tx.transaction_type==="income" ? "text-emerald-400" : "text-red-400")}>
               {tx.transaction_type==="income" ? "+" : "-"}₪{Number(tx.amount).toLocaleString("he-IL")}
             </span>
-            <button onClick={()=>setPendingDeleteId(tx.id)} className="text-slate-600 hover:text-red-400 opacity-0 group-hover:opacity-100">
+            <button onClick={()=>setPendingDeleteId(tx.id)} className="text-slate-600 hover:text-red-400 opacity-100 sm:opacity-0 sm:group-hover:opacity-100">
               <Icon name="trash" className="w-3.5 h-3.5" />
             </button>
           </div>
@@ -296,7 +296,7 @@ function CreditTab({ categories, profile, members }: { categories: Row[]; profil
         </div>
       )}
       {/* View transactions by month */}
-      <div className="mb-4 flex items-center gap-3">
+      <div className="mb-4 flex flex-wrap items-center gap-3">
         <AppCalendar value={viewMonth + "-01"} onChange={(d) => setViewMonth(d.slice(0,7))} label="הצג חודש" />
       </div>
       {/* Import history */}
@@ -421,10 +421,10 @@ export default function Finance() {
   return (
     <div>
       <h2 className="text-2xl font-bold text-theme mb-6">כספים</h2>
-      <div className="flex rounded-xl bg-slate-900 border border-slate-800 p-0.5 mb-6 w-fit">
+      <div className="flex flex-wrap rounded-xl bg-slate-900 border border-slate-800 p-0.5 mb-6 w-full sm:w-fit">
         {([["manual","ידני","wallet"],["credit","אשראי","credit-card"],["analytics","ניתוח","bar-chart"]] as const).map(([v,lbl,icon]) => (
           <button key={v} onClick={() => setActiveTab(v)}
-            className={"px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-1.5 " +
+            className={"flex-1 sm:flex-none px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center justify-center gap-1.5 " +
               (activeTab===v ? "bg-accent-700 text-white" : "text-theme-muted hover:text-theme")}>
             <Icon name={icon} className="w-3.5 h-3.5" /> {lbl}
           </button>

@@ -5,6 +5,7 @@ type AssistantRequest = {
   context?: {
     inventory?: Array<Record<string, unknown>>;
     tasks?: Array<Record<string, unknown>>;
+    appointments?: Array<Record<string, unknown>>;
   };
 };
 
@@ -89,32 +90,37 @@ export default async function handler(req: Request): Promise<Response> {
 
     const inventory = Array.isArray(body.context?.inventory) ? body.context?.inventory : [];
     const tasks = Array.isArray(body.context?.tasks) ? body.context?.tasks : [];
+    const appointments = Array.isArray(body.context?.appointments) ? body.context?.appointments : [];
 
     const systemInstruction = [
     "You are a Hebrew assistant for a family household app.",
-    "You help with shopping list questions and task creation suggestions.",
+    "You help with shopping list questions, task management, and calendar events.",
     "Return ONLY valid JSON, no markdown.",
     "Schema:",
     "{",
     '  "reply": "string in Hebrew",',
     '  "actions": [',
     "    {",
-    '      "type": "add_inventory_item" | "add_task",',
+    '      "type": "add_inventory_item" | "add_task" | "add_event" | "shift_task_schedule" | "shift_event_schedule",',
     '      "payload": { ... }',
     "    }",
     "  ]",
     "}",
     "For add_inventory_item payload keys: name (required), unit (optional), quantity (optional number), critical_threshold (optional number), notes (optional).",
-    "For add_task payload keys: title (required), description (optional), task_type (optional: priority|time_sensitive), priority_level (optional 1-5), due_date (optional YYYY-MM-DD), is_recurring (optional boolean), recurrence_days (optional array of 0-6), recurrence_time (optional HH:mm).",
-    "Only emit actions when user clearly asks to add/create.",
+    "For add_task payload keys: title (required), description (optional), task_type (optional: priority|time_sensitive), priority_level (optional 1-5), due_date (optional YYYY-MM-DD), due_time (optional HH:mm), is_recurring (optional boolean), recurrence_days (optional array of 0-6), recurrence_time (optional HH:mm).",
+    "For add_event payload keys: title (required), date (required YYYY-MM-DD), time (optional HH:mm), provider_name (optional), location (optional), notes (optional), status (optional scheduled|completed|cancelled).",
+    "For shift_task_schedule payload keys: title (required), hours_delta (optional number), months_delta (optional number). Match by title from task context (prefer closest upcoming unfinished task).",
+    "For shift_event_schedule payload keys: title (required), hours_delta (optional number), months_delta (optional number). Match by title from appointments context (prefer closest upcoming event).",
+    "Only emit actions when user clearly asks to add/create/update/shift.",
     "If user asks informational question, actions should be empty and reply should answer based on context.",
-    "Do not invent inventory items or tasks that are not in context when answering questions.",
+    "Do not invent inventory items, tasks, or events that are not in context when answering questions.",
   ].join("\n");
 
     const userPrompt = [
     `User message: ${message}`,
     `Inventory context (first 200): ${JSON.stringify(inventory.slice(0, 200))}`,
     `Tasks context (first 200): ${JSON.stringify(tasks.slice(0, 200))}`,
+    `Appointments context (first 200): ${JSON.stringify(appointments.slice(0, 200))}`,
   ].join("\n\n");
 
     const geminiRes = await requestGeminiWithFallback(
@@ -152,4 +158,3 @@ export default async function handler(req: Request): Promise<Response> {
     });
   }
 }
-

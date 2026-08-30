@@ -37,11 +37,21 @@ function dateToUtcIso(dateInput: string, timeZone: string): string | null {
   }
 }
 
+function mergeDateAndTimeToUtcIso(dateInput: string, timeInput: string | null | undefined, timeZone: string): string | null {
+  if (!dateInput) return null;
+  const time = typeof timeInput === "string" && timeInput.trim() ? timeInput.trim() : "09:00";
+  return dateToUtcIso(`${dateInput}T${time}`, timeZone);
+}
+
 export default function AiAssistantCard({
   inventory,
   tasks,
+  appointments,
   onAddInventoryItem,
   onAddTask,
+  onAddEvent,
+  onShiftTaskSchedule,
+  onShiftEventSchedule,
   standalone = false,
   initialMessage,
   messages: externalMessages,
@@ -49,8 +59,12 @@ export default function AiAssistantCard({
 }: {
   inventory: Row[];
   tasks: Row[];
+  appointments: Row[];
   onAddInventoryItem: (item: Row) => Promise<void> | void;
   onAddTask: (task: Row) => Promise<void> | void;
+  onAddEvent: (event: Row) => Promise<void> | void;
+  onShiftTaskSchedule: (payload: Row) => Promise<void> | void;
+  onShiftEventSchedule: (payload: Row) => Promise<void> | void;
   standalone?: boolean;
   initialMessage?: string;
   messages?: Msg[];
@@ -82,6 +96,10 @@ export default function AiAssistantCard({
     () => tasks.map((t) => ({ title: t.title, status: t.status, task_type: t.task_type, due_at: t.due_at, scheduled_start_at: t.scheduled_start_at })),
     [tasks]
   );
+  const appointmentContext = useMemo(
+    () => appointments.map((a) => ({ title: a.title, starts_at: a.starts_at, provider_name: a.provider_name, location: a.location, status: a.status })),
+    [appointments]
+  );
 
   const runAction = async (action: AssistantAction) => {
     const payload = action.payload ?? {};
@@ -112,6 +130,10 @@ export default function AiAssistantCard({
       const recurrenceRule = isRecurring ? JSON.stringify({ days: recurrenceDays, time: recurrenceTime }) : null;
       const nextOccurrence = isRecurring ? getNextOccurrence(recurrenceDays, recurrenceTime) : null;
       const dueDate = typeof payload.due_date === "string" ? payload.due_date : "";
+      const dueTime = typeof payload.due_time === "string" ? payload.due_time : null;
+      const dueAt = isRecurring
+        ? nextOccurrence
+        : mergeDateAndTimeToUtcIso(dueDate, dueTime, timeZone);
 
       await onAddTask({
         title,
@@ -121,15 +143,40 @@ export default function AiAssistantCard({
         module: "general",
         source_type: "manual",
         priority_level: taskType === "priority" ? Number(payload.priority_level ?? 3) : null,
-        due_at: isRecurring
-          ? (taskType === "priority" ? nextOccurrence : null)
-          : (taskType === "priority" ? dateToUtcIso(dueDate, timeZone) : null),
-        scheduled_start_at: isRecurring
-          ? (taskType === "time_sensitive" ? nextOccurrence : null)
-          : (taskType === "time_sensitive" ? dateToUtcIso(dueDate, timeZone) : null),
+        due_at: taskType === "priority" ? dueAt : null,
+        scheduled_start_at: taskType === "time_sensitive" ? dueAt : null,
         is_recurring: isRecurring,
         recurrence_rule: recurrenceRule,
       });
+      return;
+    }
+
+    if (action.type === "add_event") {
+      const title = String(payload.title ?? "").trim();
+      const date = String(payload.date ?? "").trim();
+      if (!title || !date) return;
+
+      const startAt = mergeDateAndTimeToUtcIso(date, typeof payload.time === "string" ? payload.time : null, timeZone);
+      if (!startAt) return;
+
+      await onAddEvent({
+        title,
+        starts_at: startAt,
+        provider_name: payload.provider_name ? String(payload.provider_name) : null,
+        location: payload.location ? String(payload.location) : null,
+        notes: payload.notes ? String(payload.notes) : null,
+        status: payload.status ? String(payload.status) : "scheduled",
+      });
+      return;
+    }
+
+    if (action.type === "shift_task_schedule") {
+      await onShiftTaskSchedule(payload);
+      return;
+    }
+
+    if (action.type === "shift_event_schedule") {
+      await onShiftEventSchedule(payload);
     }
   };
 
@@ -150,6 +197,7 @@ export default function AiAssistantCard({
           context: {
             inventory: inventoryContext,
             tasks: taskContext,
+            appointments: appointmentContext,
           },
         }),
       });
@@ -235,7 +283,7 @@ export default function AiAssistantCard({
         {/* Messages */}
         <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-3">
           {messages.length === 0 && (
-            <p className="text-sm text-theme-muted text-center mt-8">שאל אותי על רשימת הקניות, צור משימה, או כל שאלה אחרת.</p>
+            <p className="text-sm text-theme-muted text-center mt-8">שאל אותי על קניות, משימות, אירועים, או עדכון תאריכים ושעות.</p>
           )}
           {messages.map((m, idx) => (
             <div
@@ -273,9 +321,9 @@ export default function AiAssistantCard({
         <div>
           <h3 className="text-sm font-semibold text-theme flex items-center gap-2">
             <Icon name="chat" className="w-4 h-4 text-accent-400" />
-            סוכן חכם לקניות ומשימות
+            סוכן חכם לקניות, משימות ואירועים
           </h3>
-          <p className="text-xs text-theme-muted mt-1">לדוגמה: "תוסיף חלב וביצים" או "מה חסר לקנייה השבוע?"</p>
+          <p className="text-xs text-theme-muted mt-1">לדוגמה: "תוסיף חלב", "קבעי אירוע ביום חמישי", או "תדחי משימה בחודש"</p>
         </div>
         <Icon name={open ? "chevron-up" : "chevron-down"} className="w-4 h-4 text-theme-muted" />
       </button>
@@ -283,7 +331,7 @@ export default function AiAssistantCard({
       {open && (
         <div className="flex flex-col border-t border-slate-800">
           <div className="max-h-56 overflow-y-auto p-3 space-y-2">
-            {messages.length === 0 && <p className="text-xs text-theme-muted">שאל אותי על רשימת הקניות או בקש ליצור משימה.</p>}
+            {messages.length === 0 && <p className="text-xs text-theme-muted">אפשר ליצור קניות/משימות/אירועים ולעדכן תאריכים.</p>}
             {messages.map((m, idx) => (
               <div key={idx} className={"text-xs whitespace-pre-wrap " + (m.role === "user" ? "text-accent-300" : "text-theme")}>{m.text}</div>
             ))}
@@ -294,5 +342,4 @@ export default function AiAssistantCard({
     </section>
   );
 }
-
 

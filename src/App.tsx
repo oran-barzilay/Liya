@@ -2,7 +2,8 @@ import { useEffect } from "react";
 import { Routes, Route, Navigate, useNavigate } from "react-router-dom";
 import { useAuth } from "./contexts/AuthContext";
 import { useProfile } from "./hooks/useProfile";
-import { getContrastColor, useThemeStore } from "./state/stores/themeStore";
+import { useThemeStore } from "./state/stores/themeStore";
+import { useResolvedTheme } from "./lib/themeVars";
 import Layout from "./components/Layout";
 import Login from "./pages/Login";
 import Setup from "./pages/Setup";
@@ -15,43 +16,21 @@ import Baby from "./pages/Baby";
 import Finance from "./pages/Finance";
 import Settings from "./pages/Settings";
 
-function hexToRgb(hex: string) {
-  const cleaned = hex.replace("#", "");
-  if (!/^[0-9a-fA-F]{6}$/.test(cleaned)) return null;
-  const r = Number.parseInt(cleaned.slice(0, 2), 16);
-  const g = Number.parseInt(cleaned.slice(2, 4), 16);
-  const b = Number.parseInt(cleaned.slice(4, 6), 16);
-  return `${r} ${g} ${b}`;
-}
-
 function AppRoutes() {
   const { user, loading: authLoading, isRecovery, clearRecovery } = useAuth();
   const { data: profile, isLoading: profileLoading } = useProfile();
-  const { accentColor, accentCustom, appBg, menuBg, textPrimary, textMuted } = useThemeStore();
+  const { appBg, menuBg } = useThemeStore();
+  const theme = useResolvedTheme();
+  const textMuted = theme.textMuted;
   const navigate = useNavigate();
 
   useEffect(() => {
     const root = document.documentElement;
-    root.setAttribute("data-accent", accentColor);
-    root.setAttribute("data-surface", getContrastColor(appBg) === "dark" ? "light" : "dark");
-    root.style.setProperty("--app-bg", appBg);
-    root.style.setProperty("--menu-bg", menuBg);
-    root.style.setProperty("--text-primary", textPrimary);
-    root.style.setProperty("--text-muted", textMuted);
-    if (accentColor === "custom") {
-      const rgb = hexToRgb(accentCustom);
-      if (rgb) {
-        root.style.setProperty("--accent-300", rgb);
-        root.style.setProperty("--accent-400", rgb);
-        root.style.setProperty("--accent-500", rgb);
-        root.style.setProperty("--accent-600", rgb);
-        root.style.setProperty("--accent-700", rgb);
-        root.style.setProperty("--accent-800", rgb);
-        root.style.setProperty("--accent-900", rgb);
-        root.style.setProperty("--accent-950", rgb);
-      }
-    }
-  }, [accentColor, accentCustom, appBg, menuBg, textPrimary, textMuted]);
+    root.setAttribute("data-surface", theme.surface);
+    for (const [name, value] of Object.entries(theme.vars)) root.style.setProperty(name, value);
+    // Match the mobile browser / status bar to the app chrome
+    document.querySelector('meta[name="theme-color"]')?.setAttribute("content", menuBg);
+  }, [theme, menuBg]);
 
   // When arriving via a password-recovery email link, redirect to Settings
   // where the user can change their password in-app.
@@ -64,7 +43,7 @@ function AppRoutes() {
 
   if (authLoading || (user && profileLoading)) {
     return (
-      <div className="min-h-screen flex items-center justify-center" style={{ backgroundColor: appBg }}>
+      <div className="min-h-[100dvh] flex items-center justify-center" style={{ backgroundColor: appBg }}>
         <div className="text-sm animate-pulse" style={{ color: textMuted }}>טוען...</div>
       </div>
     );

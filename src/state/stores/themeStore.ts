@@ -226,14 +226,6 @@ function ensureReadablePalette(palette: Palette): Palette {
   };
 }
 
-/**
- * Compute relative luminance and ensure text/background contrast.
- * Returns the better of the two text colors based on WCAG contrast ratio.
- */
-export function getContrastColor(bgHex: string): "light" | "dark" {
-  return relativeLuminance(bgHex) > 0.4 ? "dark" : "light";
-}
-
 export const useThemeStore = create<ThemeState>()(
   persist(
     (set, get) => ({

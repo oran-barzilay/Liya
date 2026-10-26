@@ -191,24 +191,25 @@ export default function Assistant() {
 
   return (
     <div>
-      <div className="mb-4">
-        <h2 className="text-2xl font-bold text-theme">צ'אט עם הסוכן</h2>
-        <p className="text-theme-muted text-sm mt-1">{description}</p>
+      <div className="mb-3 md:mb-4">
+        <h2 className="hidden md:block text-2xl font-bold text-theme">צ'אט עם הסוכן</h2>
+        <p className="text-theme-muted text-xs md:text-sm md:mt-1 truncate md:whitespace-normal">{description}</p>
       </div>
 
-      <div className="flex flex-col gap-4 items-start xl:flex-row">
-        {/* Sidebar – conversation history */}
-        <aside className="w-full xl:w-56 shrink-0 flex flex-col gap-2">
+      <div className="flex flex-col gap-3 md:gap-4 items-start xl:flex-row">
+        {/* Sidebar – conversation history (a single scrolling strip on phones) */}
+        <aside className="w-full xl:w-56 shrink-0 flex xl:flex-col gap-2">
           <button
             type="button"
             onClick={handleNewChat}
-            className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-xl bg-accent-600 hover:bg-accent-500 text-white text-sm font-medium transition-colors"
+            className="shrink-0 xl:w-full flex items-center justify-center gap-2 px-3 py-2 rounded-xl bg-accent-600 hover:bg-accent-500 text-white text-sm font-medium transition-colors"
+            aria-label="שיחה חדשה"
           >
             <Icon name="plus" className="w-4 h-4" />
-            שיחה חדשה
+            <span className="hidden sm:inline">שיחה חדשה</span>
           </button>
 
-          <div className="flex xl:flex-col gap-1 max-h-[60vh] xl:max-h-[70vh] overflow-x-auto xl:overflow-y-auto pb-1">
+          <div className="flex xl:flex-col gap-1 min-w-0 flex-1 xl:max-h-[70vh] overflow-x-auto no-scrollbar xl:overflow-y-auto">
             {conversations.length === 0 && (
               <p className="text-xs text-theme-muted text-center py-4 w-full">אין שיחות קודמות</p>
             )}
@@ -217,7 +218,7 @@ export default function Assistant() {
                 key={conv.id}
                 onClick={() => setActiveId(conv.id)}
                 className={
-                  "group min-w-[180px] xl:min-w-0 flex items-start justify-between gap-1 px-3 py-2 rounded-xl cursor-pointer border transition-colors " +
+                  "group min-w-[150px] max-w-[200px] xl:max-w-none xl:min-w-0 shrink-0 xl:shrink flex items-start justify-between gap-1 px-3 py-2 rounded-xl cursor-pointer border transition-colors " +
                   (conv.id === activeId
                     ? "bg-accent-900/60 border-accent-600"
                     : "bg-slate-900/40 border-slate-800 hover:bg-slate-800/60")
@@ -230,7 +231,7 @@ export default function Assistant() {
                 <button
                   type="button"
                   onClick={(e) => handleDeleteConversation(e, conv.id)}
-                  className="opacity-100 xl:opacity-0 xl:group-hover:opacity-100 shrink-0 p-1 rounded-lg hover:bg-red-900/50 text-red-400 transition-all"
+                  className="opacity-100 xl:opacity-0 xl:group-hover:opacity-100 shrink-0 p-1.5 -m-1 rounded-lg hover:bg-red-900/50 text-red-400 transition-all"
                   title="מחק שיחה"
                 >
                   <Icon name="trash" className="w-3.5 h-3.5" />

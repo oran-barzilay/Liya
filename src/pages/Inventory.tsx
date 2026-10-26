@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useInventory } from "../hooks/useInventory";
 import { useInventoryCategories } from "../hooks/useInventoryCategories";
 import Icon from "../components/Icon";
+import Fab from "../components/Fab";
 type Item = Record<string, any>;
 type Category = Record<string, any>;
 const QUICK_CATEGORIES = ["פארם", "שתיה", "תבלינים", "פחמימות"] as const;
@@ -37,7 +38,7 @@ function ItemModal({ item, defaultCategoryId, categories, existingNames, onClose
   const normalizedName = normalizeItemName(name);
   const canSave = !!normalizedName && !existingNames.has(normalizedName);
   return (
-    <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
+    <div className="modal-overlay" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
       <form onSubmit={(e) => {
         e.preventDefault();
         if (!canSave) {
@@ -46,10 +47,10 @@ function ItemModal({ item, defaultCategoryId, categories, existingNames, onClose
         }
         onSave({ ...(item?.id ? { id: item.id } : {}), name, unit, quantity: Number(qty), critical_threshold: Number(thr), auto_restock_task: auto, category_id: catId || null, notes: notes || null });
         onClose();
-      }} className="bg-slate-900 border border-slate-700 rounded-2xl p-5 w-full max-w-sm space-y-4">
+      }} className="modal-panel bg-slate-900 border-slate-700 sm:max-w-sm space-y-4">
         <div className="flex items-center justify-between">
           <h3 className="font-semibold text-theme">{item?.id ? "עריכת פריט" : "הוסף פריט"}</h3>
-          <button type="button" onClick={onClose} className="text-theme-muted hover:text-theme"><Icon name="x" className="w-4 h-4" /></button>
+          <button type="button" onClick={onClose} className="-m-2 p-2 rounded-lg text-theme-muted hover:text-theme" aria-label="סגור"><Icon name="x" className="w-5 h-5" /></button>
         </div>
         <div>
           <label className="text-xs text-theme-muted block mb-1">שם *</label>
@@ -77,17 +78,17 @@ function ItemModal({ item, defaultCategoryId, categories, existingNames, onClose
         </div>
         <div className="grid grid-cols-2 gap-3">
           <div><label className="text-xs text-theme-muted block mb-1">כמות</label>
-            <input type="number" min="0" step="0.5" value={qty} onChange={(e)=>setQty(e.target.value)} className="input-base w-full" /></div>
+            <input type="number" inputMode="decimal" min="0" step="0.5" value={qty} onChange={(e)=>setQty(e.target.value)} className="input-base w-full" /></div>
           <div><label className="text-xs text-theme-muted block mb-1">יחידה</label>
             <input value={unit} onChange={(e)=>setUnit(e.target.value)} className="input-base w-full" /></div>
         </div>
         <div>
           <label className="text-xs text-theme-muted block mb-1">סף התראה</label>
-          <input type="number" min="0" step="0.5" value={thr} onChange={(e)=>setThr(e.target.value)} className="input-base w-full" />
+          <input type="number" inputMode="decimal" min="0" step="0.5" value={thr} onChange={(e)=>setThr(e.target.value)} className="input-base w-full" />
           <p className="text-xs text-theme-muted mt-1 opacity-70">משימת רכישה תיווצר כשהכמות נמוכה מהסף.</p>
         </div>
-        <label className="flex items-center gap-2 cursor-pointer">
-          <input type="checkbox" checked={auto} onChange={(e)=>setAuto(e.target.checked)} />
+        <label className="flex items-center gap-3 cursor-pointer py-1">
+          <input type="checkbox" checked={auto} onChange={(e)=>setAuto(e.target.checked)} className="w-5 h-5 sm:w-4 sm:h-4 accent-[rgb(var(--accent-600))]" />
           <span className="text-sm text-theme-muted">יצירת משימת רכישה אוטומטית</span>
         </label>
         <div><label className="text-xs text-theme-muted block mb-1">הערות</label>
@@ -95,7 +96,7 @@ function ItemModal({ item, defaultCategoryId, categories, existingNames, onClose
         <button
           type="submit"
           disabled={!canSave}
-          className="w-full bg-accent-600 hover:bg-accent-500 disabled:opacity-50 text-white font-medium py-2 rounded-lg text-sm"
+          className="w-full bg-accent-600 hover:bg-accent-500 disabled:opacity-50 text-white font-medium py-3 sm:py-2 rounded-xl sm:rounded-lg text-sm"
         >
           {item?.id ? "שמור" : "הוסף פריט"}
         </button>
@@ -117,12 +118,12 @@ function ItemRow({ item, onEdit, onDelete, onUpdate, categoryName }: {
     onUpdate({ ...item, quantity: clamped });
   };
   return (
-    <div className={"flex items-center gap-2 px-3 py-2 border-b border-slate-800 hover:bg-slate-800/30 transition-colors " + (low ? "bg-red-950/10" : "")}>
-      {/* Name */}
-      <div className="flex-1 min-w-0">
-        <span className={"text-sm font-medium " + (low ? "text-red-300" : "text-theme")}>{item.name}</span>
-        {low && <span className="text-xs text-red-400 mr-1.5">מלאי נמוך</span>}
-      </div>
+    <div className={"flex items-center gap-1.5 sm:gap-2 ps-3 pe-1 sm:pe-3 py-1.5 sm:py-2 border-b border-slate-800 hover:bg-slate-800/30 transition-colors " + (low ? "bg-red-950/10" : "")}>
+      {/* Name – tap to edit */}
+      <button type="button" onClick={() => onEdit(item)} className="flex-1 min-w-0 text-right py-1.5">
+        <span className={"block sm:inline text-[15px] sm:text-sm font-medium truncate " + (low ? "text-red-300" : "text-theme")}>{item.name}</span>
+        {low && <span className="text-xs text-red-400 sm:mr-1.5">מלאי נמוך</span>}
+      </button>
       {/* Category badge – shown only in flat view */}
       {categoryName !== undefined && (
         <span className="hidden sm:inline-flex items-center text-xs px-2 py-0.5 rounded-full bg-slate-800 text-theme-muted border border-slate-700 shrink-0 max-w-[8rem] truncate">
@@ -132,12 +133,12 @@ function ItemRow({ item, onEdit, onDelete, onUpdate, categoryName }: {
       {/* Quantity controls */}
       <div className="flex items-center gap-1">
         <button onClick={() => changeQty(localQty - 1)}
-          className="w-6 h-6 rounded bg-slate-800 hover:bg-slate-700 flex items-center justify-center text-theme-muted hover:text-theme transition-colors">
-          <Icon name="minus" className="w-3 h-3" />
+          className="w-9 h-9 sm:w-7 sm:h-7 rounded-lg bg-slate-800 hover:bg-slate-700 active:bg-slate-700 flex items-center justify-center text-theme-muted hover:text-theme transition-colors">
+          <Icon name="minus" className="w-4 h-4 sm:w-3 sm:h-3" />
         </button>
         {editingQty ? (
           <input
-            type="number" value={localQty} min="0" step="0.5"
+            type="number" inputMode="decimal" value={localQty} min="0" step="0.5"
             onChange={(e) => setLocalQty(Number(e.target.value))}
             onBlur={() => { changeQty(localQty); setEditingQty(false); }}
             onKeyDown={(e) => { if (e.key === "Enter") { changeQty(localQty); setEditingQty(false); } }}
@@ -146,13 +147,13 @@ function ItemRow({ item, onEdit, onDelete, onUpdate, categoryName }: {
           />
         ) : (
           <button onClick={() => setEditingQty(true)}
-            className="text-sm font-medium min-w-14 text-center hover:bg-slate-800 rounded py-0.5 px-1 text-theme">
+            className="text-sm font-medium min-w-12 sm:min-w-14 text-center hover:bg-slate-800 rounded py-2 sm:py-0.5 px-1 text-theme whitespace-nowrap">
             {Number(item.quantity)} {item.unit}
           </button>
         )}
         <button onClick={() => changeQty(localQty + 1)}
-          className="w-6 h-6 rounded bg-slate-800 hover:bg-slate-700 flex items-center justify-center text-theme-muted hover:text-theme transition-colors">
-          <Icon name="plus" className="w-3 h-3" />
+          className="w-9 h-9 sm:w-7 sm:h-7 rounded-lg bg-slate-800 hover:bg-slate-700 active:bg-slate-700 flex items-center justify-center text-theme-muted hover:text-theme transition-colors">
+          <Icon name="plus" className="w-4 h-4 sm:w-3 sm:h-3" />
         </button>
       </div>
       {/* Threshold */}
@@ -160,8 +161,8 @@ function ItemRow({ item, onEdit, onDelete, onUpdate, categoryName }: {
       {/* Progress dot */}
       <div className={"w-2 h-2 rounded-full shrink-0 " + (low ? "bg-red-500" : pct < 50 ? "bg-amber-500" : "bg-emerald-500")} />
       {/* Actions */}
-      <button onClick={() => onEdit(item)} className="text-theme-muted hover:text-accent-400 transition-colors p-0.5"><Icon name="edit" className="w-3.5 h-3.5" /></button>
-      <button onClick={() => onDelete(item)} className="text-theme-muted hover:text-red-400 transition-colors p-0.5"><Icon name="trash" className="w-3.5 h-3.5" /></button>
+      <button onClick={() => onEdit(item)} className="hidden sm:block text-theme-muted hover:text-accent-400 transition-colors p-1.5 rounded-lg" aria-label="עריכה"><Icon name="edit" className="w-4 h-4" /></button>
+      <button onClick={() => onDelete(item)} className="text-theme-muted hover:text-red-400 transition-colors p-2.5 sm:p-1.5 rounded-lg" aria-label="מחיקה"><Icon name="trash" className="w-4 h-4" /></button>
     </div>
   );
 }
@@ -177,7 +178,7 @@ function InlineAddTrigger({
       <button
         type="button"
         onClick={() => onOpen(categoryId)}
-        className="bg-accent-600 hover:bg-accent-500 text-white text-xs px-2.5 py-1.5 rounded-lg flex items-center gap-1"
+        className="bg-accent-600 hover:bg-accent-500 text-white text-sm sm:text-xs px-3 sm:px-2.5 py-2 sm:py-1.5 rounded-lg flex items-center gap-1"
         title="הוסף פריט"
       >
         <Icon name="plus" className="w-3.5 h-3.5" />
@@ -282,21 +283,21 @@ export default function Inventory() {
             {items.length} מוצרים במעקב · <span className="text-red-400">{lowStock.length} חסרים לקנייה</span>
           </p>
         </div>
-        <div className="flex flex-wrap gap-2 w-full sm:w-auto">
+        <div className="grid grid-cols-2 md:flex md:flex-wrap gap-2 w-full sm:w-auto">
           <button
             onClick={() => setViewMode((prev) => prev === "grouped" ? "flat" : "grouped")}
-            className="text-sm font-medium px-3 py-2 rounded-lg bg-slate-900 border border-slate-800 text-theme-muted hover:text-theme flex items-center gap-1.5"
+            className="text-sm font-medium px-3 py-2.5 sm:py-2 rounded-lg bg-slate-900 border border-slate-800 text-theme-muted hover:text-theme flex items-center justify-center gap-1.5"
           >
             <Icon name={viewMode === "grouped" ? "layers" : "grid"} className="w-3.5 h-3.5" />
             {viewMode === "grouped" ? "תצוגה מלאה" : "לפי קטגוריות"}
           </button>
           <button onClick={() => setShowCatMgmt(!showCatMgmt)}
-            className={"text-sm font-medium px-3 py-2 rounded-lg transition-colors flex items-center gap-1.5 " +
+            className={"text-sm font-medium px-3 py-2.5 sm:py-2 rounded-lg transition-colors flex items-center justify-center gap-1.5 " +
               (showCatMgmt ? "bg-accent-700 text-white" : "bg-slate-900 border border-slate-800 text-theme-muted hover:text-theme")}>
             <Icon name="tag" className="w-3.5 h-3.5" /> קטגוריות
           </button>
           <button onClick={() => setModal({ open: true })}
-            className="w-full sm:w-auto bg-accent-600 hover:bg-accent-500 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors flex items-center justify-center gap-1.5">
+            className="hidden md:flex w-full sm:w-auto bg-accent-600 hover:bg-accent-500 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors items-center justify-center gap-1.5">
             <Icon name="plus" className="w-3.5 h-3.5" /> הוסף מוצר
           </button>
         </div>
@@ -304,13 +305,13 @@ export default function Inventory() {
       <div className="mb-5 rounded-2xl border border-slate-800 bg-slate-900 px-4 py-4 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
         <div>
           <h3 className="text-sm font-semibold text-theme">רשימת הקניות של הבית</h3>
-          <p className="text-xs text-theme-muted mt-1">כאן מרכזים חוסרים ומוצרים לקנייה, כדי לא להעמיס על מסך המשימות הרגיל.</p>
+          <p className="hidden sm:block text-xs text-theme-muted mt-1">כאן מרכזים חוסרים ומוצרים לקנייה, כדי לא להעמיס על מסך המשימות הרגיל.</p>
         </div>
-        <div className="flex flex-wrap gap-2">
+        <div className="grid grid-cols-2 sm:flex sm:flex-wrap gap-2">
           <button
             type="button"
             onClick={() => setStockFilter("low")}
-            className={"px-3 py-1.5 rounded-lg text-xs font-medium transition-colors border " +
+            className={"px-3 py-2.5 sm:py-1.5 rounded-lg text-sm sm:text-xs font-medium transition-colors border " +
               (stockFilter === "low"
                 ? "bg-red-700 border-red-600 text-white"
                 : "bg-slate-800 border-slate-700 text-theme-muted hover:text-theme")}
@@ -320,7 +321,7 @@ export default function Inventory() {
           <button
             type="button"
             onClick={() => setStockFilter("all")}
-            className={"px-3 py-1.5 rounded-lg text-xs font-medium transition-colors border " +
+            className={"px-3 py-2.5 sm:py-1.5 rounded-lg text-sm sm:text-xs font-medium transition-colors border " +
               (stockFilter === "all"
                 ? "bg-accent-700 border-accent-600 text-white"
                 : "bg-slate-800 border-slate-700 text-theme-muted hover:text-theme")}
@@ -342,16 +343,16 @@ export default function Inventory() {
               <div key={cat.id} className="flex items-center gap-1.5 bg-slate-800 border border-slate-700 rounded-lg px-3 py-1.5">
                 <span className="text-sm text-theme">{cat.name}</span>
                 {!cat.is_system && (
-                  <button onClick={() => setPendingDeleteCat(cat)} className="text-slate-600 hover:text-red-400 ml-1">
-                    <Icon name="x" className="w-3 h-3" />
+                  <button onClick={() => setPendingDeleteCat(cat)} className="text-slate-600 hover:text-red-400 -my-1 -me-1.5 p-1.5" aria-label="מחק קטגוריה">
+                    <Icon name="x" className="w-3.5 h-3.5" />
                   </button>
                 )}
               </div>
             ))}
           </div>
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
             <input value={newCatName} onChange={(e) => setNewCatName(e.target.value)}
-              placeholder="שם קטגוריה חדשה" className="input-base flex-1 text-sm" />
+              placeholder="שם קטגוריה חדשה" className="input-base basis-full sm:basis-0 flex-1 text-sm" />
             <button disabled={!newCatName.trim()}
               onClick={() => { addCategory.mutate(newCatName.trim()); setNewCatName(""); }}
               className="bg-accent-600 hover:bg-accent-500 disabled:opacity-40 text-white text-sm px-3 py-2 rounded-lg flex items-center gap-1.5">
@@ -369,9 +370,9 @@ export default function Inventory() {
         </div>
       )}
       <div className="flex flex-wrap gap-2 mb-5">
-        <div className="relative min-w-0 flex-1 sm:max-w-sm">
+        <div className="relative min-w-0 basis-full sm:basis-0 flex-1 sm:max-w-sm">
           <Icon name="search" className="w-4 h-4 absolute right-3 top-1/2 -translate-y-1/2 text-theme-muted pointer-events-none" />
-          <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="חפש פריטים..." className="input-base w-full pr-9" />
+          <input value={search} onChange={(e) => setSearch(e.target.value)} type="search" enterKeyHint="search" placeholder="חפש פריטים..." className="input-base w-full pr-9" />
         </div>
         <select value={stockFilter} onChange={(e) => setStockFilter(e.target.value as "all" | "low" | "threshold")} className="input-base text-sm flex-1 sm:flex-none">
           <option value="all">כל הפריטים</option>
@@ -398,7 +399,7 @@ export default function Inventory() {
           <div key={catKey} className="mb-3">
             <button
               onClick={() => toggleCollapse(catKey)}
-              className="w-full flex items-center gap-2 px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl hover:bg-slate-800/50 transition-colors">
+              className="w-full flex flex-wrap items-center gap-x-2 gap-y-0.5 px-3 py-3 sm:py-2 bg-slate-900 border border-slate-800 rounded-xl hover:bg-slate-800/50 transition-colors">
               <Icon name={collapsed ? "chevron-left" : "chevron-down"} className="w-4 h-4 text-theme-muted" />
               <span className="text-sm font-semibold text-theme">{cat?.name ?? "ללא קטגוריה"}</span>
               <span className="text-xs text-theme-muted">({groupItems.length} פריטים)</span>
@@ -425,7 +426,7 @@ export default function Inventory() {
       {viewMode === "flat" && filtered.length > 0 && (
         <div className="border border-slate-800 rounded-xl overflow-hidden">
           {/* Header row */}
-          <div className="flex items-center gap-2 px-3 py-2 bg-slate-900 border-b border-slate-800 text-xs text-theme-muted font-semibold select-none">
+          <div className="hidden sm:flex items-center gap-2 px-3 py-2 bg-slate-900 border-b border-slate-800 text-xs text-theme-muted font-semibold select-none">
             <span className="flex-1">שם פריט</span>
             <span className="hidden md:block w-32 text-center">קטגוריה</span>
             <span className="w-24 sm:w-32 text-center">כמות</span>
@@ -448,6 +449,8 @@ export default function Inventory() {
           })}
         </div>
       )}
+      <div className="h-20 md:hidden" aria-hidden="true" />
+      <Fab label="מוצר" onClick={() => setModal({ open: true })} />
       {modal.open && (
         <ItemModal
           item={modal.item}
@@ -460,26 +463,26 @@ export default function Inventory() {
       )}
       {/* Delete item confirm */}
       {pendingDelete && (
-        <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4">
-          <div className="w-full max-w-md rounded-2xl border border-slate-700 bg-slate-900 p-5">
+        <div className="modal-overlay" onClick={(e) => { if (e.target === e.currentTarget) setPendingDelete(null); }}>
+          <div className="modal-panel sm:max-w-md border-slate-700 bg-slate-900">
             <div className="flex items-center gap-2 mb-1"><Icon name="warning" className="w-5 h-5 text-red-400" /><h3 className="text-base font-semibold text-theme">למחוק פריט זה?</h3></div>
             <p className="text-sm text-theme-muted mt-1">הפעולה אינה ניתנת לביטול.</p>
-            <div className="flex justify-end gap-2 mt-4">
-              <button onClick={() => setPendingDelete(null)} className="px-3 py-2 rounded-lg text-sm bg-slate-800 text-theme-muted hover:bg-slate-700">ביטול</button>
-              <button onClick={() => { deleteItem.mutate(pendingDelete.id); setPendingDelete(null); }} className="px-3 py-2 rounded-lg text-sm bg-red-600 text-white hover:bg-red-500">מחיקה</button>
+            <div className="grid grid-cols-2 gap-2 mt-5 sm:flex sm:justify-end sm:mt-4">
+              <button onClick={() => setPendingDelete(null)} className="px-4 py-2.5 sm:py-2 rounded-xl sm:rounded-lg text-sm font-medium bg-slate-800 text-theme-muted hover:bg-slate-700">ביטול</button>
+              <button onClick={() => { deleteItem.mutate(pendingDelete.id); setPendingDelete(null); }} className="px-4 py-2.5 sm:py-2 rounded-xl sm:rounded-lg text-sm font-medium bg-red-600 text-white hover:bg-red-500">מחיקה</button>
             </div>
           </div>
         </div>
       )}
       {/* Delete category confirm */}
       {pendingDeleteCat && (
-        <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4">
-          <div className="w-full max-w-md rounded-2xl border border-slate-700 bg-slate-900 p-5">
+        <div className="modal-overlay" onClick={(e) => { if (e.target === e.currentTarget) setPendingDeleteCat(null); }}>
+          <div className="modal-panel sm:max-w-md border-slate-700 bg-slate-900">
             <div className="flex items-center gap-2 mb-1"><Icon name="warning" className="w-5 h-5 text-red-400" /><h3 className="text-base font-semibold text-theme">למחוק קטגוריה "{pendingDeleteCat.name}"?</h3></div>
             <p className="text-sm text-theme-muted mt-1">הפריטים בקטגוריה זו לא יימחקו, אלא יופרדו ממנה.</p>
-            <div className="flex justify-end gap-2 mt-4">
-              <button onClick={() => setPendingDeleteCat(null)} className="px-3 py-2 rounded-lg text-sm bg-slate-800 text-theme-muted hover:bg-slate-700">ביטול</button>
-              <button onClick={() => { deleteCategory.mutate(pendingDeleteCat.id); setPendingDeleteCat(null); }} className="px-3 py-2 rounded-lg text-sm bg-red-600 text-white hover:bg-red-500">מחיקה</button>
+            <div className="grid grid-cols-2 gap-2 mt-5 sm:flex sm:justify-end sm:mt-4">
+              <button onClick={() => setPendingDeleteCat(null)} className="px-4 py-2.5 sm:py-2 rounded-xl sm:rounded-lg text-sm font-medium bg-slate-800 text-theme-muted hover:bg-slate-700">ביטול</button>
+              <button onClick={() => { deleteCategory.mutate(pendingDeleteCat.id); setPendingDeleteCat(null); }} className="px-4 py-2.5 sm:py-2 rounded-xl sm:rounded-lg text-sm font-medium bg-red-600 text-white hover:bg-red-500">מחיקה</button>
             </div>
           </div>
         </div>

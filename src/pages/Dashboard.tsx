@@ -30,11 +30,11 @@ function StatCard({ icon, label, value, sub, color = "accent", onClick }: {
   return (
     <Tag
       onClick={onClick}
-      className={"rounded-xl border p-4 text-right w-full transition-colors " + colorMap[color] + (onClick ? " hover:brightness-110 active:scale-95 cursor-pointer" : "")}
+      className={"rounded-xl border p-3 sm:p-4 text-right w-full min-w-0 transition-colors " + colorMap[color] + (onClick ? " hover:brightness-110 active:scale-95 cursor-pointer" : "")}
     >
       <div className="mb-2 text-theme-muted">{icon}</div>
-      <div className="text-2xl font-bold text-theme">{value}</div>
-      <div className="text-sm font-medium text-theme-muted mt-0.5">{label}</div>
+      <div className="text-xl sm:text-2xl font-bold text-theme truncate">{value}</div>
+      <div className="text-xs sm:text-sm font-medium text-theme-muted mt-0.5 leading-snug">{label}</div>
       {sub && <div className="text-xs text-theme-muted mt-1 opacity-70 truncate">{sub}</div>}
     </Tag>
   );
@@ -97,45 +97,45 @@ export default function Dashboard() {
 
   return (
     <div>
-      <div className="mb-6 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+      <div className="mb-5 sm:mb-6 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
         <div className="flex items-center gap-3">
           <Icon name="hand-wave" className="w-6 h-6 text-accent-400" />
           <div>
-            <h2 className="text-2xl font-bold text-theme">{greeting}, {profile?.display_name ?? ""}!</h2>
+            <h2 className="text-xl sm:text-2xl font-bold text-theme">{greeting}, {profile?.display_name ?? ""}!</h2>
             <p className="text-theme-muted text-sm mt-1">
               {formatInTimeZone(new Date(), timeZone, { weekday: "long", year: "numeric", month: "long", day: "numeric" })}
             </p>
-            <p className="text-xs text-theme-muted mt-2 opacity-80">הנה כל מה שחשוב לבית היום — בלי לחפש בין מסכים.</p>
+            <p className="hidden sm:block text-xs text-theme-muted mt-2 opacity-80">הנה כל מה שחשוב לבית היום — בלי לחפש בין מסכים.</p>
           </div>
         </div>
-        <div className="flex flex-wrap gap-2">
+        <div className="grid grid-cols-2 sm:flex sm:flex-wrap gap-2">
           <button onClick={() => navigate("/tasks")}
-            className="bg-accent-600 hover:bg-accent-500 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors flex items-center gap-1.5">
+            className="bg-accent-600 hover:bg-accent-500 text-white text-sm font-medium px-3 sm:px-4 py-3 sm:py-2 rounded-xl sm:rounded-lg transition-colors flex items-center justify-center gap-1.5">
             <Icon name="plus" className="w-3.5 h-3.5" /> משימה חדשה
           </button>
           <button onClick={() => navigate("/weekly")}
-            className="bg-slate-900 border border-slate-800 hover:bg-slate-800 text-theme text-sm font-medium px-4 py-2 rounded-lg transition-colors flex items-center gap-1.5">
+            className="bg-slate-900 border border-slate-800 hover:bg-slate-800 text-theme text-sm font-medium px-3 sm:px-4 py-3 sm:py-2 rounded-xl sm:rounded-lg transition-colors flex items-center justify-center gap-1.5">
             <Icon name="calendar" className="w-3.5 h-3.5" /> תכנון שבועי
           </button>
           <button onClick={() => navigate("/inventory")}
-            className="bg-slate-900 border border-slate-800 hover:bg-slate-800 text-theme text-sm font-medium px-4 py-2 rounded-lg transition-colors flex items-center gap-1.5">
+            className="bg-slate-900 border border-slate-800 hover:bg-slate-800 text-theme text-sm font-medium px-3 sm:px-4 py-3 sm:py-2 rounded-xl sm:rounded-lg transition-colors flex items-center justify-center gap-1.5">
             <Icon name="package" className="w-3.5 h-3.5" /> מה חסר בבית
           </button>
           {children.length > 0 && (
             <button onClick={() => navigate("/baby")}
-              className="bg-slate-900 border border-slate-800 hover:bg-slate-800 text-theme text-sm font-medium px-4 py-2 rounded-lg transition-colors flex items-center gap-1.5">
+              className="bg-slate-900 border border-slate-800 hover:bg-slate-800 text-theme text-sm font-medium px-3 sm:px-4 py-3 sm:py-2 rounded-xl sm:rounded-lg transition-colors flex items-center justify-center gap-1.5">
               <Icon name="baby" className="w-3.5 h-3.5" /> עדכון תינוקות
             </button>
           )}
         </div>
       </div>
 
-      <section className="mb-6 rounded-2xl border border-accent-800/70 bg-accent-950/20 p-4">
+      <section className="mb-5 sm:mb-6 rounded-2xl border border-accent-800/70 bg-accent-950/20 p-4">
         <div className="flex items-center gap-2 mb-2">
           <Icon name="users" className="w-4 h-4 text-accent-400" />
           <h3 className="text-sm font-semibold text-theme">שאלה מהירה לסוכן</h3>
         </div>
-        <p className="text-xs text-theme-muted mb-3">שאל כאן שאלה ראשונה, ואז נעביר אותך למסך צ'אט ייעודי עם כל ההקשר של הבית.</p>
+        <p className="hidden sm:block text-xs text-theme-muted mb-3">שאל כאן שאלה ראשונה, ואז נעביר אותך למסך צ'אט ייעודי עם כל ההקשר של הבית.</p>
         <div className="flex gap-2">
           <input
             value={agentQuestion}
@@ -146,7 +146,8 @@ export default function Dashboard() {
                 goToAssistant();
               }
             }}
-            className="input-base flex-1"
+            className="input-base flex-1 min-w-0"
+            enterKeyHint="send"
             placeholder="לדוגמה: מה המשימות שלי למחר?"
           />
           <button type="button" onClick={goToAssistant}
@@ -156,15 +157,15 @@ export default function Dashboard() {
         </div>
       </section>
 
-      <section className="mb-6 grid gap-4 lg:grid-cols-[1.3fr_0.9fr]">
-        <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5">
+      <section className="mb-5 sm:mb-6 grid gap-3 sm:gap-4 lg:grid-cols-[1.3fr_0.9fr]">
+        <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-5">
           <div className="flex items-center justify-between gap-3 mb-4">
             <div>
               <h3 className="text-base font-semibold text-theme">מה חשוב היום</h3>
-              <p className="text-xs text-theme-muted mt-1">המשימות היומיומיות שלך, בלי פריטי קנייה אוטומטיים.</p>
+              <p className="hidden sm:block text-xs text-theme-muted mt-1">המשימות היומיומיות שלך, בלי פריטי קנייה אוטומטיים.</p>
             </div>
             <button onClick={() => navigate("/tasks")}
-              className="text-xs text-accent-400 hover:text-accent-300 font-medium flex items-center gap-1">
+              className="text-xs text-accent-400 hover:text-accent-300 font-medium flex items-center gap-1 shrink-0 py-2 -my-2">
               לכל המשימות <Icon name="chevron-left" className="w-3.5 h-3.5" />
             </button>
           </div>
@@ -196,14 +197,14 @@ export default function Dashboard() {
           </div>
         </div>
 
-        <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5">
+        <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-5">
           <div className="flex items-center justify-between gap-3 mb-4">
             <div>
               <h3 className="text-base font-semibold text-theme">מה חסר בבית</h3>
-              <p className="text-xs text-theme-muted mt-1">ריכוז מהיר של דברים לקנייה, בלי לערבב אותם עם המשימות.</p>
+              <p className="hidden sm:block text-xs text-theme-muted mt-1">ריכוז מהיר של דברים לקנייה, בלי לערבב אותם עם המשימות.</p>
             </div>
             <button onClick={() => navigate("/inventory")}
-              className="text-xs text-accent-400 hover:text-accent-300 font-medium flex items-center gap-1">
+              className="text-xs text-accent-400 hover:text-accent-300 font-medium flex items-center gap-1 shrink-0 py-2 -my-2">
               לרשימת הקניות <Icon name="chevron-left" className="w-3.5 h-3.5" />
             </button>
           </div>
@@ -235,7 +236,7 @@ export default function Dashboard() {
       </section>
 
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 mb-8">
+      <div className="grid grid-cols-2 xl:grid-cols-4 gap-2 sm:gap-4 mb-6 sm:mb-8">
         <StatCard icon={<Icon name="clock" className="w-6 h-6" />} label="משימות מתוזמנות היום" value={todayTimeSensitive.length} sub={openEverydayTasks.length + " משימות פתוחות"} color="accent" onClick={() => navigate("/tasks")} />
         <StatCard icon={<Icon name="package" className="w-6 h-6" />} label="פריטים לקנייה" value={lowStock.length}
           sub={lowStock.slice(0, 2).map(i => i.name).join(", ") || "הכל תקין"} color={lowStock.length > 0 ? "red" : "emerald"} onClick={() => navigate("/inventory")} />
@@ -325,7 +326,7 @@ export default function Dashboard() {
               <code className="text-xs text-theme-muted font-mono break-all">{profile.household_id}</code>
             </div>
             <button onClick={copyHouseholdId}
-              className={"shrink-0 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors flex items-center gap-1.5 " + (copied ? "bg-emerald-700 text-white" : "bg-slate-700 hover:bg-slate-600 text-theme-muted")}>
+              className={"shrink-0 px-3 py-2.5 sm:py-1.5 rounded-lg text-xs font-medium transition-colors flex items-center gap-1.5 " + (copied ? "bg-emerald-700 text-white" : "bg-slate-700 hover:bg-slate-600 text-theme-muted")}>
               {copied ? <><Icon name="check" className="w-3 h-3" /> הועתק!</> : <><Icon name="copy" className="w-3 h-3" /> העתק</>}
             </button>
           </div>

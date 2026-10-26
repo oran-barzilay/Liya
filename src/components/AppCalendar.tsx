@@ -1,4 +1,5 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useLayoutEffect } from "react";
+import { createPortal } from "react-dom";
 import Icon from "./Icon";
 import { usePreferencesStore } from "../state/stores/preferencesStore";
 import {
@@ -26,6 +27,9 @@ export default function AppCalendar({
   const timeZone = usePreferencesStore((s) => s.timeZone);
   const [open, setOpen] = useState(inline);
   const ref = useRef<HTMLDivElement>(null);
+  const popRef = useRef<HTMLDivElement>(null);
+  const [popStyle, setPopStyle] = useState<React.CSSProperties | null>(null);
+  const isPhone = typeof window !== "undefined" && window.matchMedia("(max-width: 639px)").matches;
   const normalizedValue = mode === "datetime" && /Z$|[+-]\d{2}:\d{2}$/.test(value)
     ? utcIsoToDateTimeInput(value, timeZone)
     : value;
@@ -42,11 +46,35 @@ export default function AppCalendar({
   useEffect(() => {
     if (inline) return;
     const handle = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+      const target = e.target as Node;
+      if (ref.current?.contains(target) || popRef.current?.contains(target)) return;
+      setOpen(false);
     };
     document.addEventListener("mousedown", handle);
     return () => document.removeEventListener("mousedown", handle);
   }, [inline]);
+
+  // Desktop: anchor the popover to the trigger with fixed positioning so it is
+  // never clipped by a scrolling modal. Phones use a bottom sheet instead.
+  useLayoutEffect(() => {
+    if (inline || !open || isPhone || !ref.current) { setPopStyle(null); return; }
+    const place = () => {
+      const r = ref.current!.getBoundingClientRect();
+      const width = 288;
+      const height = 330;
+      const below = window.innerHeight - r.bottom;
+      const top = below >= height + 8 || below > r.top ? r.bottom + 6 : Math.max(8, r.top - height - 6);
+      const right = Math.min(Math.max(8, window.innerWidth - r.right), window.innerWidth - width - 8);
+      setPopStyle({ position: "fixed", top, right, zIndex: 70 });
+    };
+    place();
+    window.addEventListener("resize", place);
+    window.addEventListener("scroll", place, true);
+    return () => {
+      window.removeEventListener("resize", place);
+      window.removeEventListener("scroll", place, true);
+    };
+  }, [open, inline, isPhone]);
 
   useEffect(() => {
     if (normalizedValue && normalizedValue.includes("T")) setTime(normalizedValue.slice(11, 16));
@@ -112,14 +140,14 @@ export default function AppCalendar({
 
   const Panel = () => (
     <div
-      className="bg-slate-900 border border-slate-700 rounded-xl shadow-2xl p-3 w-72"
+      className={"bg-slate-900 border-slate-700 " + (isPhone && !inline ? "w-full" : "border rounded-xl shadow-2xl p-3 w-72")}
       dir="rtl"
-      style={{ minWidth: "272px" }}
+      style={isPhone ? undefined : { minWidth: "272px" }}
     >
       {/* Month navigation */}
       <div className="flex items-center justify-between mb-2">
         <button type="button" onClick={prevMonth}
-          className="text-theme-muted hover:text-theme p-1.5 rounded-lg hover:bg-slate-800 transition-colors">
+          className="text-theme-muted hover:text-theme p-2.5 sm:p-1.5 rounded-lg hover:bg-slate-800 transition-colors" aria-label="חודש קודם">
           <Icon name="chevron-right" className="w-4 h-4" />
         </button>
         <div className="flex items-center gap-2">
@@ -128,7 +156,7 @@ export default function AppCalendar({
           </span>
         </div>
         <button type="button" onClick={nextMonth}
-          className="text-theme-muted hover:text-theme p-1.5 rounded-lg hover:bg-slate-800 transition-colors">
+          className="text-theme-muted hover:text-theme p-2.5 sm:p-1.5 rounded-lg hover:bg-slate-800 transition-colors" aria-label="חודש הבא">
           <Icon name="chevron-left" className="w-4 h-4" />
         </button>
       </div>
@@ -136,7 +164,7 @@ export default function AppCalendar({
       {/* Day headers */}
       <div className="grid grid-cols-7 mb-1">
         {DAY_NAMES.map(d => (
-          <div key={d} className="text-center text-[10px] text-theme-muted py-1 font-medium">{d}</div>
+          <div key={d} className="text-center text-[11px] sm:text-[10px] text-theme-muted py-1 font-medium">{d}</div>
         ))}
       </div>
 
@@ -152,7 +180,7 @@ export default function AppCalendar({
           return (
             <button key={i} type="button" onClick={() => selectDay(day)}
               className={
-                "text-xs py-1.5 rounded-lg transition-colors text-center font-medium " +
+                "text-sm sm:text-xs h-10 sm:h-auto sm:py-1.5 rounded-lg transition-colors text-center font-medium " +
                 (isSel
                   ? "bg-accent-600 text-white"
                   : isTod
@@ -168,7 +196,7 @@ export default function AppCalendar({
       {/* Today button */}
       <div className="mt-2 pt-2 border-t border-slate-800 flex items-center justify-between">
         <button type="button" onClick={goToday}
-          className="text-xs text-accent-400 hover:text-accent-300 font-medium transition-colors">
+          className="text-sm sm:text-xs text-accent-400 hover:text-accent-300 font-medium transition-colors py-2 px-1 -my-1 sm:p-0 sm:m-0">
           היום
         </button>
         {selectedDate && (
@@ -210,10 +238,20 @@ export default function AppCalendar({
         </span>
         <Icon name="calendar" className="w-4 h-4 text-theme-muted shrink-0" />
       </button>
-      {open && (
-        <div className="absolute top-full mt-1.5 z-[60] start-0 max-w-[calc(100vw-2rem)]">
+      {open && isPhone && createPortal(
+        <div className="modal-overlay" style={{ zIndex: 70 }} onClick={(e) => { if (e.target === e.currentTarget) setOpen(false); }}>
+          <div ref={popRef} className="modal-panel bg-slate-900 border-slate-700">
+            {label && <div className="text-sm font-semibold text-theme mb-2">{label}</div>}
+            <Panel />
+          </div>
+        </div>,
+        document.body
+      )}
+      {open && !isPhone && popStyle && createPortal(
+        <div ref={popRef} style={popStyle}>
           <Panel />
-        </div>
+        </div>,
+        document.body
       )}
       {mode === "datetime" && (
         <div className="mt-2">

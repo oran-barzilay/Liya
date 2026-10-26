@@ -55,7 +55,7 @@ export default function Login() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-950 flex items-center justify-center px-4">
+    <div className="min-h-[100dvh] bg-slate-950 flex items-center justify-center px-4 py-8">
       <div className="w-full max-w-sm">
         <div className="text-center mb-8">
           <div className="text-5xl mb-3 font-bold text-accent-400">Fami</div>
@@ -68,7 +68,7 @@ export default function Login() {
               <button key={m} type="button"
                 onClick={() => { setMode(m); setError(""); setInfo(""); }}
                 className={"flex-1 py-2 rounded-lg text-sm font-medium transition-colors " +
-                  (mode === m ? "bg-accent-600 text-white" : "text-slate-400 hover:text-white")}>
+                  (mode === m ? "bg-accent-600 text-white" : "text-slate-400 hover:text-theme")}>
                 {m === "signin" ? "כניסה" : "יצירת חשבון"}
               </button>
             ))}
@@ -78,7 +78,7 @@ export default function Login() {
         {mode === "reset" && (
           <div className="flex items-center gap-2 mb-4">
             <button onClick={() => { setMode("signin"); setError(""); setInfo(""); }}
-              className="text-slate-400 hover:text-white transition-colors">
+              className="text-slate-400 hover:text-theme transition-colors">
               <Icon name="chevron-right" className="w-4 h-4" />
             </button>
             <h2 className="text-base font-semibold text-theme">איפוס סיסמה</h2>
@@ -97,23 +97,23 @@ export default function Login() {
           )}
           <div>
             <label className="block text-sm text-slate-300 mb-1.5">אימייל</label>
-            <input type="email" required value={email} onChange={e => setEmail(e.target.value)}
-              className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2.5 text-sm text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-accent-500"
+            <input type="email" required autoComplete="email" inputMode="email" autoCapitalize="none" dir="ltr" value={email} onChange={e => setEmail(e.target.value)}
+              className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2.5 text-sm text-theme placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-accent-500"
               placeholder="oran@family.com" />
           </div>
           {mode !== "reset" && (
             <div>
               <label className="block text-sm text-slate-300 mb-1.5">סיסמה</label>
-              <input type="password" required value={password} onChange={e => setPassword(e.target.value)}
-                className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2.5 text-sm text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-accent-500"
+              <input type="password" required autoComplete={mode === "signup" ? "new-password" : "current-password"} dir="ltr" value={password} onChange={e => setPassword(e.target.value)}
+                className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2.5 text-sm text-theme placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-accent-500"
                 placeholder="••••••••" />
             </div>
           )}
           {mode === "signup" && (
             <div>
               <label className="block text-sm text-slate-300 mb-1.5">אימות סיסמה</label>
-              <input type="password" required value={confirm} onChange={e => setConfirm(e.target.value)}
-                className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2.5 text-sm text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-accent-500"
+              <input type="password" required autoComplete="new-password" dir="ltr" value={confirm} onChange={e => setConfirm(e.target.value)}
+                className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2.5 text-sm text-theme placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-accent-500"
                 placeholder="••••••••" />
             </div>
           )}

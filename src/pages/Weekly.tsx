@@ -4,6 +4,7 @@ import { useAppointments } from "../hooks/useBaby";
 import { useTasks } from "../hooks/useTasks";
 import Icon from "../components/Icon";
 import AppCalendar from "../components/AppCalendar";
+import Fab from "../components/Fab";
 import { usePreferencesStore } from "../state/stores/preferencesStore";
 import {
   formatInTimeZone,
@@ -53,18 +54,18 @@ function AddEventModal({ onClose, onSave, timeZone, defaultDate }: {
   const [notes, setNotes] = useState("");
 
   return (
-    <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
+    <div className="modal-overlay" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
       <form
         onSubmit={(e) => {
           e.preventDefault();
           onSave({ title, starts_at: startsAt ? zonedDateTimeToUtcIso(startsAt, timeZone) : null, provider_name: provider || null, location: loc || null, notes: notes || null, status: "scheduled" });
           onClose();
         }}
-        className="bg-slate-900 border border-slate-700 rounded-2xl p-5 w-full max-w-sm space-y-4 overflow-y-auto max-h-[92dvh]"
+        className="modal-panel bg-slate-900 border-slate-700 sm:max-w-sm space-y-4"
       >
         <div className="flex items-center justify-between">
           <h3 className="font-semibold text-theme">אירוע חדש</h3>
-          <button type="button" onClick={onClose} className="text-theme-muted hover:text-theme"><Icon name="x" className="w-4 h-4" /></button>
+          <button type="button" onClick={onClose} className="-m-2 p-2 rounded-lg text-theme-muted hover:text-theme" aria-label="סגור"><Icon name="x" className="w-5 h-5" /></button>
         </div>
         <div>
           <label className="text-xs text-theme-muted block mb-1">כותרת *</label>
@@ -85,7 +86,7 @@ function AddEventModal({ onClose, onSave, timeZone, defaultDate }: {
           <label className="text-xs text-theme-muted block mb-1">הערות</label>
           <input value={notes} onChange={(e) => setNotes(e.target.value)} className="input-base w-full" placeholder="פרטים נוספים..." />
         </div>
-        <button type="submit" disabled={!title || !startsAt} className="w-full bg-accent-600 hover:bg-accent-500 disabled:opacity-50 text-white font-medium py-2.5 rounded-lg text-sm transition-colors">
+        <button type="submit" disabled={!title || !startsAt} className="w-full bg-accent-600 hover:bg-accent-500 disabled:opacity-50 text-white font-medium py-3 sm:py-2.5 rounded-xl sm:rounded-lg text-sm transition-colors">
           שמור אירוע
         </button>
       </form>
@@ -104,22 +105,22 @@ function EditEventModal({ event, onClose, onSave, timeZone }: {
   const [notes, setNotes] = useState(event.notes ?? "");
 
   return (
-    <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
+    <div className="modal-overlay" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
       <form
         onSubmit={(e) => {
           e.preventDefault();
           onSave({ id: event.id, title, starts_at: startsAt ? zonedDateTimeToUtcIso(startsAt, timeZone) : null, provider_name: provider || null, location: loc || null, notes: notes || null });
           onClose();
         }}
-        className="bg-slate-900 border border-slate-700 rounded-2xl p-5 w-full max-w-sm space-y-4 overflow-y-auto max-h-[92dvh]"
+        className="modal-panel bg-slate-900 border-slate-700 sm:max-w-sm space-y-4"
       >
         <div className="flex items-center justify-between">
           <h3 className="font-semibold text-theme">עריכת אירוע</h3>
-          <button type="button" onClick={onClose} className="text-theme-muted hover:text-theme"><Icon name="x" className="w-4 h-4" /></button>
+          <button type="button" onClick={onClose} className="-m-2 p-2 rounded-lg text-theme-muted hover:text-theme" aria-label="סגור"><Icon name="x" className="w-5 h-5" /></button>
         </div>
         <div>
           <label className="text-xs text-theme-muted block mb-1">כותרת *</label>
-          <input autoFocus required value={title} onChange={(e) => setTitle(e.target.value)} className="input-base w-full" />
+          <input required value={title} onChange={(e) => setTitle(e.target.value)} className="input-base w-full" />
         </div>
         <AppCalendar mode="datetime" value={startsAt} onChange={setStartsAt} label="תאריך ושעה" inline />
         <div className="grid grid-cols-2 gap-3">
@@ -136,7 +137,7 @@ function EditEventModal({ event, onClose, onSave, timeZone }: {
           <label className="text-xs text-theme-muted block mb-1">הערות</label>
           <input value={notes} onChange={(e) => setNotes(e.target.value)} className="input-base w-full" />
         </div>
-        <button type="submit" className="w-full bg-accent-600 hover:bg-accent-500 text-white font-medium py-2.5 rounded-lg text-sm transition-colors">שמור</button>
+        <button type="submit" className="w-full bg-accent-600 hover:bg-accent-500 text-white font-medium py-3 sm:py-2.5 rounded-xl sm:rounded-lg text-sm transition-colors">שמור</button>
       </form>
     </div>
   );
@@ -145,16 +146,16 @@ function EditEventModal({ event, onClose, onSave, timeZone }: {
 /* ─── Delete Confirm ─── */
 function DeleteConfirm({ onConfirm, onCancel }: { onConfirm: () => void; onCancel: () => void }) {
   return (
-    <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4">
-      <div className="w-full max-w-sm rounded-2xl border border-slate-700 bg-slate-900 p-5">
+    <div className="modal-overlay" onClick={(e) => { if (e.target === e.currentTarget) onCancel(); }}>
+      <div className="modal-panel sm:max-w-sm border-slate-700 bg-slate-900">
         <div className="flex items-center gap-2 mb-1">
           <Icon name="warning" className="w-5 h-5 text-red-400" />
           <h3 className="text-base font-semibold text-theme">למחוק אירוע זה?</h3>
         </div>
         <p className="text-sm text-theme-muted mt-1">הפעולה אינה ניתנת לביטול.</p>
-        <div className="flex justify-end gap-2 mt-4">
-          <button onClick={onCancel} className="px-4 py-2 rounded-lg text-sm bg-slate-800 text-theme-muted hover:bg-slate-700">ביטול</button>
-          <button onClick={onConfirm} className="px-4 py-2 rounded-lg text-sm bg-red-600 text-white hover:bg-red-500">מחיקה</button>
+        <div className="grid grid-cols-2 gap-2 mt-5 sm:flex sm:justify-end sm:mt-4">
+          <button onClick={onCancel} className="px-4 py-2.5 sm:py-2 rounded-xl sm:rounded-lg text-sm font-medium bg-slate-800 text-theme-muted hover:bg-slate-700">ביטול</button>
+          <button onClick={onConfirm} className="px-4 py-2.5 sm:py-2 rounded-xl sm:rounded-lg text-sm font-medium bg-red-600 text-white hover:bg-red-500">מחיקה</button>
         </div>
       </div>
     </div>
@@ -219,7 +220,7 @@ export default function Weekly() {
   const gridRef = useRef<HTMLDivElement>(null);
   const todayRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
-    if (todayRef.current && gridRef.current) {
+    if (todayRef.current && gridRef.current && window.matchMedia("(min-width: 640px)").matches) {
       const container = gridRef.current;
       const el = todayRef.current;
       const containerLeft = container.getBoundingClientRect().left;
@@ -239,11 +240,11 @@ export default function Weekly() {
       <div className="flex flex-wrap items-center justify-between gap-3 mb-5">
         <div>
           <h2 className="text-2xl font-bold text-theme">תכנון שבועי</h2>
-          <p className="text-theme-muted text-sm mt-0.5">אירועים, יציאות, תורים ומשימות — הכול במקום אחד.</p>
+          <p className="hidden sm:block text-theme-muted text-sm mt-0.5">אירועים, יציאות, תורים ומשימות — הכול במקום אחד.</p>
         </div>
         <button
           onClick={() => { setAddDefaultDate(undefined); setAddModal(true); }}
-          className="bg-accent-600 hover:bg-accent-500 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors flex items-center gap-1.5"
+          className="hidden md:flex bg-accent-600 hover:bg-accent-500 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors items-center gap-1.5"
         >
           <Icon name="plus" className="w-3.5 h-3.5" /> אירוע חדש
         </button>
@@ -251,26 +252,27 @@ export default function Weekly() {
 
       {/* Week navigation */}
       <div className="flex items-center gap-2 mb-4">
-        <button onClick={() => setWeekAnchor(addDays(weekAnchor, -7))}
-          className="p-2 rounded-lg bg-slate-900 border border-slate-800 text-theme-muted hover:text-theme active:bg-slate-800 transition-colors">
+        <button onClick={() => setWeekAnchor(addDays(weekAnchor, -7))} aria-label="שבוע קודם"
+          className="p-3 sm:p-2 rounded-lg bg-slate-900 border border-slate-800 text-theme-muted hover:text-theme active:bg-slate-800 transition-colors">
           <Icon name="chevron-right" className="w-4 h-4" />
         </button>
         <span className="flex-1 text-sm font-medium text-theme text-center">{weekLabel}</span>
-        <button onClick={() => setWeekAnchor(addDays(weekAnchor, 7))}
-          className="p-2 rounded-lg bg-slate-900 border border-slate-800 text-theme-muted hover:text-theme active:bg-slate-800 transition-colors">
+        <button onClick={() => setWeekAnchor(addDays(weekAnchor, 7))} aria-label="שבוע הבא"
+          className="p-3 sm:p-2 rounded-lg bg-slate-900 border border-slate-800 text-theme-muted hover:text-theme active:bg-slate-800 transition-colors">
           <Icon name="chevron-left" className="w-4 h-4" />
         </button>
         {weekStart !== startOfWeek(today) && (
           <button onClick={() => setWeekAnchor(today)}
-            className="px-3 py-1.5 rounded-lg bg-accent-900/40 border border-accent-700 text-xs text-accent-300 hover:text-accent-200 font-medium transition-colors">
+            className="px-3 py-2.5 sm:py-1.5 rounded-lg bg-accent-900/40 border border-accent-700 text-xs text-accent-300 hover:text-accent-200 font-medium transition-colors">
             השבוע
           </button>
         )}
       </div>
 
       {/* Horizontal scrollable week grid */}
-      <div ref={gridRef} className="overflow-x-auto pb-2 mb-6 -mx-4 px-4 scroll-smooth">
-        <div className="flex gap-2" style={{ minWidth: "max-content" }}>
+      <div ref={gridRef} className="sm:overflow-x-auto no-scrollbar pb-2 mb-6 sm:-mx-4 sm:px-4 md:mx-0 md:px-0 scroll-smooth sm:snap-x snap-proximity">
+        {/* Phones: vertical agenda. Larger screens: horizontal week strip. */}
+        <div className="flex flex-col sm:flex-row gap-2 sm:min-w-max">
           {weekDays.map((day, idx) => {
             const dayItems = weeklyItems.filter((item) => item.at.slice(0, 10) === day);
             const isToday = day === today;
@@ -281,34 +283,35 @@ export default function Weekly() {
                 key={day}
                 ref={isToday ? todayRef : undefined}
                 className={
-                  "flex flex-col rounded-xl border p-3 transition-colors " +
+                  "flex-col rounded-xl border p-3 transition-colors snap-start w-full flex-shrink-0 " +
+                  (isPast && dayItems.length === 0 ? "hidden sm:flex " : "flex ") +
                   (isToday
-                    ? "border-accent-600 bg-accent-950/30 w-44 flex-shrink-0"
+                    ? "border-accent-600 bg-accent-950/30 sm:w-44"
                     : isPast
-                    ? "border-slate-800 bg-slate-950/20 opacity-60 w-36 flex-shrink-0"
-                    : "border-slate-800 bg-slate-950/40 w-36 flex-shrink-0")
+                    ? "border-slate-800 bg-slate-950/20 opacity-60 sm:w-36"
+                    : "border-slate-800 bg-slate-950/40 sm:w-36")
                 }
               >
                 {/* Day header */}
                 <div className="flex items-center justify-between mb-2">
-                  <div>
-                    <div className={"text-xs font-bold " + (isToday ? "text-accent-300" : isPast ? "text-slate-500" : "text-theme-muted")}>
+                  <div className="flex items-baseline gap-2 sm:block">
+                    <div className={"text-sm sm:text-xs font-bold " + (isToday ? "text-accent-300" : isPast ? "text-slate-500" : "text-theme-muted")}>
                       {DAY_NAMES_FULL[idx]}
                     </div>
                     <div className={"text-lg font-bold leading-none mt-0.5 " + (isToday ? "text-accent-400" : isPast ? "text-slate-500" : "text-theme")}>
                       {formatInTimeZone(day + "T12:00:00", timeZone, { day: "numeric" })}
                     </div>
-                    <div className={"text-[10px] " + (isToday ? "text-accent-400/70" : "text-theme-muted opacity-60")}>
+                    <div className={"text-xs sm:text-[10px] " + (isToday ? "text-accent-400/70" : "text-theme-muted opacity-60")}>
                       {formatInTimeZone(day + "T12:00:00", timeZone, { month: "long" })}
                     </div>
                   </div>
                   {!isPast && (
                     <button
                       onClick={() => openAddForDay(day)}
-                      className="p-1 rounded-lg text-slate-600 hover:text-accent-400 hover:bg-slate-800 transition-colors"
-                      title="הוסף אירוע"
+                      className="-m-1 p-2 rounded-lg text-slate-500 hover:text-accent-400 hover:bg-slate-800 transition-colors"
+                      title="הוסף אירוע" aria-label="הוסף אירוע"
                     >
-                      <Icon name="plus" className="w-3.5 h-3.5" />
+                      <Icon name="plus" className="w-4 h-4" />
                     </button>
                   )}
                 </div>
@@ -324,7 +327,7 @@ export default function Weekly() {
                     <div
                       key={item.id}
                       className={
-                        "rounded-lg border px-2 py-1.5 " +
+                        "rounded-lg border px-3 py-2 sm:px-2 sm:py-1.5 " +
                         (item.kind === "event"
                           ? "border-accent-800/60 bg-accent-950/40"
                           : "border-slate-700/60 bg-slate-900/60")
@@ -332,25 +335,25 @@ export default function Weekly() {
                     >
                       <div className="flex items-start justify-between gap-1">
                         <div className="min-w-0 flex-1">
-                          <div className="text-[10px] text-accent-400/80 font-medium mb-0.5">
+                          <div className="text-[11px] sm:text-[10px] text-accent-400/80 font-medium mb-0.5">
                             {formatInTimeZone(item.at, timeZone, { hour: "2-digit", minute: "2-digit" })}
                           </div>
-                          <div className="text-[11px] text-theme font-medium leading-snug truncate">{item.title}</div>
-                          {item.meta && <div className="text-[10px] text-theme-muted opacity-60 truncate">{item.meta}</div>}
+                          <div className="text-sm sm:text-xs text-theme font-medium leading-snug line-clamp-2">{item.title}</div>
+                          {item.meta && <div className="text-[11px] sm:text-[10px] text-theme-muted opacity-60 truncate">{item.meta}</div>}
                         </div>
                         {item.kind === "event" && (
-                          <div className="flex flex-col gap-0.5 shrink-0">
-                            <button onClick={() => setEditingEvent(item.raw)} className="p-0.5 text-slate-600 hover:text-accent-400 transition-colors">
-                              <Icon name="edit" className="w-3 h-3" />
+                          <div className="flex sm:flex-col gap-1 sm:gap-0.5 shrink-0">
+                            <button onClick={() => setEditingEvent(item.raw)} className="p-1.5 -m-0.5 text-slate-500 hover:text-accent-400 transition-colors" aria-label="עריכה">
+                              <Icon name="edit" className="w-3.5 h-3.5" />
                             </button>
-                            <button onClick={() => setDeletingId(item.raw.id)} className="p-0.5 text-slate-600 hover:text-red-400 transition-colors">
-                              <Icon name="trash" className="w-3 h-3" />
+                            <button onClick={() => setDeletingId(item.raw.id)} className="p-1.5 -m-0.5 text-slate-500 hover:text-red-400 transition-colors" aria-label="מחיקה">
+                              <Icon name="trash" className="w-3.5 h-3.5" />
                             </button>
                           </div>
                         )}
                         {item.kind === "task" && (
-                          <button onClick={() => navigate("/tasks")} className="p-0.5 text-slate-600 hover:text-accent-400 transition-colors" title="עבור למשימות">
-                            <Icon name="chevron-left" className="w-3 h-3" />
+                          <button onClick={() => navigate("/tasks")} className="p-1.5 -m-0.5 text-slate-500 hover:text-accent-400 transition-colors" title="עבור למשימות" aria-label="עבור למשימות">
+                            <Icon name="chevron-left" className="w-3.5 h-3.5" />
                           </button>
                         )}
                       </div>
@@ -389,7 +392,7 @@ export default function Weekly() {
           {upcomingEvents.map((appt) => {
             const { text: dueText, color: dueColor } = daysUntilLabel(appt.starts_at, today, timeZone);
             return (
-              <div key={appt.id} className="flex items-start gap-3 bg-slate-900 border border-slate-800 rounded-xl px-4 py-3">
+              <div key={appt.id} className="flex items-start gap-3 bg-slate-900 border border-slate-800 rounded-xl ps-3 sm:ps-4 pe-1 sm:pe-4 py-3">
                 {/* Date block */}
                 <div className="shrink-0 w-11 text-center bg-slate-800 rounded-xl py-1.5 px-1">
                   <div className="text-base font-bold text-theme leading-none">
@@ -400,7 +403,7 @@ export default function Weekly() {
                   </div>
                 </div>
                 {/* Details */}
-                <div className="flex-1 min-w-0">
+                <button type="button" onClick={() => setEditingEvent(appt)} className="flex-1 min-w-0 text-right">
                   <div className="text-sm font-semibold text-theme truncate">{appt.title}</div>
                   <div className="flex items-center gap-3 mt-1 flex-wrap">
                     <span className="text-xs text-theme-muted">
@@ -411,14 +414,14 @@ export default function Weekly() {
                   </div>
                   {appt.notes && <div className="text-xs text-theme-muted opacity-60 mt-0.5 truncate">{appt.notes}</div>}
                   <div className={"text-[11px] font-medium mt-1 " + dueColor}>{dueText}</div>
-                </div>
+                </button>
                 {/* Actions - always visible */}
                 <div className="flex gap-1 shrink-0">
-                  <button onClick={() => setEditingEvent(appt)} className="p-1.5 rounded-lg text-slate-600 hover:text-accent-400 hover:bg-slate-800 transition-colors">
-                    <Icon name="edit" className="w-3.5 h-3.5" />
+                  <button onClick={() => setEditingEvent(appt)} className="hidden sm:block p-1.5 rounded-lg text-slate-600 hover:text-accent-400 hover:bg-slate-800 transition-colors" aria-label="עריכה">
+                    <Icon name="edit" className="w-4 h-4" />
                   </button>
-                  <button onClick={() => setDeletingId(appt.id)} className="p-1.5 rounded-lg text-slate-600 hover:text-red-400 hover:bg-slate-800 transition-colors">
-                    <Icon name="trash" className="w-3.5 h-3.5" />
+                  <button onClick={() => setDeletingId(appt.id)} className="p-2.5 sm:p-1.5 -my-1.5 sm:my-0 rounded-lg text-slate-600 hover:text-red-400 hover:bg-slate-800 transition-colors" aria-label="מחיקה">
+                    <Icon name="trash" className="w-4 h-4" />
                   </button>
                 </div>
               </div>
@@ -426,6 +429,9 @@ export default function Weekly() {
           })}
         </div>
       )}
+
+      <div className="h-20 md:hidden" aria-hidden="true" />
+      <Fab label="אירוע" onClick={() => { setAddDefaultDate(undefined); setAddModal(true); }} />
 
       {/* Modals */}
       {addModal && (

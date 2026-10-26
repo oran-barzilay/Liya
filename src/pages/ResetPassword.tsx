@@ -31,7 +31,7 @@ export default function ResetPassword() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-950 flex items-center justify-center px-4">
+    <div className="min-h-[100dvh] bg-slate-950 flex items-center justify-center px-4 py-8">
       <div className="w-full max-w-sm">
         <div className="text-center mb-8">
           <div className="text-5xl mb-3 font-bold text-accent-400">Fami</div>
@@ -49,7 +49,7 @@ export default function ResetPassword() {
               value={password}
               onChange={e => setPassword(e.target.value)}
               placeholder="••••••••"
-              className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2.5 text-sm text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-accent-500"
+              className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2.5 text-sm text-theme placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-accent-500"
             />
           </div>
 
@@ -61,7 +61,7 @@ export default function ResetPassword() {
               value={confirm}
               onChange={e => setConfirm(e.target.value)}
               placeholder="••••••••"
-              className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2.5 text-sm text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-accent-500"
+              className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2.5 text-sm text-theme placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-accent-500"
             />
           </div>
 

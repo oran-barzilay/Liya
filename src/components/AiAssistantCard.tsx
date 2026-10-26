@@ -284,7 +284,8 @@ export default function AiAssistantCard({
   };
 
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+    // Scroll only the message list, not the whole page
+    bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
   }, [messages, isLoading]);
 
   useEffect(() => {
@@ -310,12 +311,12 @@ export default function AiAssistantCard({
   }, [assistantModel, preferredModel, setAssistantModel]);
 
   const inputRow = (
-    <div className="flex flex-col sm:flex-row gap-2 p-3 border-t border-slate-800 bg-slate-950/60">
+    <div className="flex flex-col sm:flex-row gap-2 p-2 sm:p-3 border-t border-slate-800 bg-slate-950/60">
       <div className="flex items-center gap-2 sm:max-w-[320px]">
         <select
           value={assistantModel}
           onChange={(e) => setAssistantModel(e.target.value)}
-          className="input-base min-w-0 text-xs"
+          className="input-base min-w-0 flex-1 sm:flex-none text-xs !min-h-0 py-1.5"
           title="בחירת מודל"
         >
           {!assistantModel && <option value="">מודל אוטומטי</option>}
@@ -328,7 +329,7 @@ export default function AiAssistantCard({
         <button
           type="button"
           onClick={() => void loadModels()}
-          className="px-2 py-2 rounded-lg border border-slate-700 text-theme-muted hover:text-theme hover:border-slate-500 text-xs shrink-0"
+          className="px-2 py-1.5 sm:py-2 rounded-lg border border-slate-700 text-theme-muted hover:text-theme hover:border-slate-500 text-xs shrink-0"
           disabled={isLoadingModels}
           title="רענון רשימת מודלים"
         >
@@ -338,36 +339,41 @@ export default function AiAssistantCard({
       {modelLoadFailed && (
         <span className="text-[11px] text-amber-300 self-center sm:self-auto">לא נטענה רשימת מודלים מהשרת, מוצגת רשימת ברירת מחדל.</span>
       )}
-      <input
-        value={input}
-        onChange={(e) => setInput(e.target.value)}
-        onKeyDown={(e) => {
-          if (e.key === "Enter") {
-            e.preventDefault();
-            void send();
-          }
-        }}
-        className="input-base flex-1"
-        placeholder="כתבו בקשה חופשית..."
-        autoFocus={standalone}
-      />
-      <button
-        type="button"
-        onClick={() => void send()}
-        disabled={isLoading || !input.trim()}
-        className="px-3 py-2 rounded-lg bg-accent-600 hover:bg-accent-500 disabled:opacity-50 text-white text-sm shrink-0"
-      >
-        {isLoading ? "חושב..." : "שלח"}
-      </button>
+      <div className="flex gap-2 flex-1 min-w-0">
+        <input
+          value={input}
+          onChange={(e) => setInput(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              e.preventDefault();
+              void send();
+            }
+          }}
+          className="input-base flex-1 min-w-0"
+          placeholder="כתבו בקשה חופשית..."
+          enterKeyHint="send"
+          // Don't pop the keyboard over the conversation on phones
+          autoFocus={standalone && window.matchMedia("(min-width: 768px)").matches}
+        />
+        <button
+          type="button"
+          onClick={() => void send()}
+          disabled={isLoading || !input.trim()}
+          className="px-3 min-w-[2.75rem] rounded-lg bg-accent-600 hover:bg-accent-500 disabled:opacity-50 text-white text-sm shrink-0 flex items-center justify-center gap-1.5"
+          aria-label="שלח"
+        >
+          <Icon name="send" className="w-4 h-4 sm:hidden" />
+          <span className="hidden sm:inline">{isLoading ? "חושב..." : "שלח"}</span>
+        </button>
+      </div>
     </div>
   );
 
   if (standalone) {
     return (
-      <div className="flex flex-col rounded-2xl border border-accent-800/70 bg-accent-950/20 overflow-hidden"
-           style={{ height: "calc(100vh - 12rem)" }}>
+      <div className="chat-pane flex flex-col rounded-2xl border border-accent-800/70 bg-accent-950/20 overflow-hidden">
         {/* Messages */}
-        <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-3">
+        <div className="flex-1 overflow-y-auto overscroll-contain p-3 sm:p-4 flex flex-col gap-3">
           {messages.length === 0 && (
             <p className="text-sm text-theme-muted text-center mt-8">שאל אותי על קניות, משימות, אירועים, או עדכון תאריכים ושעות.</p>
           )}
@@ -375,7 +381,7 @@ export default function AiAssistantCard({
             <div
               key={idx}
               className={
-                "max-w-[80%] px-4 py-2.5 rounded-2xl text-sm whitespace-pre-wrap leading-relaxed " +
+                "max-w-[88%] sm:max-w-[80%] px-4 py-2.5 rounded-2xl text-[15px] sm:text-sm whitespace-pre-wrap break-words leading-relaxed " +
                 (m.role === "user"
                   ? "bg-accent-700/80 text-white self-end ms-auto rounded-br-sm"
                   : "bg-slate-800 text-theme self-start rounded-bl-sm")

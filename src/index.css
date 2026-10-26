@@ -4,7 +4,10 @@
 
 :root {
   color-scheme: dark;
-  /* Default accent: indigo */
+  /* First-paint defaults (dark indigo). src/lib/themeVars.ts overrides all of these at runtime. */
+  --accent-50: 238 242 255;
+  --accent-100: 224 231 255;
+  --accent-200: 199 210 254;
   --accent-300: 165 180 252;
   --accent-400: 129 140 248;
   --accent-500: 99 102 241;
@@ -13,6 +16,24 @@
   --accent-800: 55 48 163;
   --accent-900: 49 46 129;
   --accent-950: 30 27 75;
+  --slate-50: 248 250 252;
+  --slate-100: 241 245 249;
+  --slate-200: 226 232 240;
+  --slate-300: 203 213 225;
+  --slate-400: 148 163 184;
+  --slate-500: 100 116 139;
+  --slate-600: 71 85 105;
+  --slate-700: 51 65 85;
+  --slate-800: 30 41 59;
+  --slate-900: 15 23 42;
+  --slate-950: 2 6 23;
+  --on-accent: #ffffff;
+  --menu-text: #cbd5e1;
+  --menu-muted: #94a3b8;
+  --menu-strong: #f8fafc;
+  --menu-border: #1f2937;
+  --menu-hover: #1e293b;
+  --menu-accent: #818cf8;
   --app-bg: #020617;
   --menu-bg: #0f172a;
   --text-primary: #f1f5f9;
@@ -32,15 +53,22 @@
   --status-info-bg: #1e3a8a;
   --status-neutral-text: #94a3b8;
   --status-neutral-bg: #1e293b;
+  /* Mobile chrome: fixed top bar + bottom tab bar, including device safe areas */
+  --mobile-top: calc(3.5rem + env(safe-area-inset-top));
+  --mobile-bottom: calc(4rem + env(safe-area-inset-bottom));
+  --chrome-h: calc(var(--mobile-top) + var(--mobile-bottom));
+}
+
+@media (min-width: 768px) {
+  :root {
+    --mobile-top: 0px;
+    --mobile-bottom: 0px;
+    --chrome-h: 0px;
+  }
 }
 
 [data-surface="light"] {
   color-scheme: light;
-  --surface-950: #fffef9;
-  --surface-900: #f8f6ef;
-  --surface-800: #f2eee4;
-  --surface-700: #e7dfcf;
-  --surface-border: #ddd6c7;
   --status-danger-text: #b42318;
   --status-danger-bg: #fde8e8;
   --status-success-text: #166534;
@@ -53,61 +81,6 @@
   --status-neutral-bg: #e2e8f0;
 }
 
-[data-accent="purple"] {
-  --accent-300: 216 180 254;
-  --accent-400: 192 132 252;
-  --accent-500: 168 85 247;
-  --accent-600: 147 51 234;
-  --accent-700: 126 34 206;
-  --accent-800: 107 33 168;
-  --accent-900: 88 28 135;
-  --accent-950: 59 7 100;
-}
-
-[data-accent="blue"] {
-  --accent-300: 147 197 253;
-  --accent-400: 96 165 250;
-  --accent-500: 59 130 246;
-  --accent-600: 37 99 235;
-  --accent-700: 29 78 216;
-  --accent-800: 30 64 175;
-  --accent-900: 30 58 138;
-  --accent-950: 23 37 84;
-}
-
-[data-accent="emerald"] {
-  --accent-300: 110 231 183;
-  --accent-400: 52 211 153;
-  --accent-500: 16 185 129;
-  --accent-600: 5 150 105;
-  --accent-700: 4 120 87;
-  --accent-800: 6 95 70;
-  --accent-900: 6 78 59;
-  --accent-950: 2 44 34;
-}
-
-[data-accent="rose"] {
-  --accent-300: 253 164 175;
-  --accent-400: 251 113 133;
-  --accent-500: 244 63 94;
-  --accent-600: 225 29 72;
-  --accent-700: 190 18 60;
-  --accent-800: 159 18 57;
-  --accent-900: 136 19 55;
-  --accent-950: 76 5 25;
-}
-
-[data-accent="amber"] {
-  --accent-300: 252 211 77;
-  --accent-400: 251 191 36;
-  --accent-500: 245 158 11;
-  --accent-600: 217 119 6;
-  --accent-700: 180 83 9;
-  --accent-800: 146 64 14;
-  --accent-900: 120 53 15;
-  --accent-950: 69 26 3;
-}
-
 body {
   margin: 0;
   font-family: Heebo, system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
@@ -115,6 +88,104 @@ body {
   color: var(--text-primary);
   /* Prevent horizontal scroll from text/layout overflow on mobile */
   overflow-x: hidden;
+  -webkit-text-size-adjust: 100%;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Remove the 300ms tap delay / double-tap zoom on interactive elements */
+button, a, label, select, summary, [role="button"] {
+  touch-action: manipulation;
+}
+
+/* Keep scroll inside the main pane instead of bouncing the whole page */
+.app-main {
+  overscroll-behavior-y: contain;
+  padding-top: var(--mobile-top);
+  padding-bottom: var(--mobile-bottom);
+}
+
+.pt-safe { padding-top: env(safe-area-inset-top); }
+.pb-safe { padding-bottom: env(safe-area-inset-bottom); }
+
+/* Horizontal chip rows that scroll without a visible scrollbar */
+.no-scrollbar { scrollbar-width: none; }
+.no-scrollbar::-webkit-scrollbar { display: none; }
+
+/* Floating action button sits just above the mobile tab bar */
+.fab-pos {
+  bottom: calc(var(--mobile-bottom) + 1rem);
+}
+
+/* ── Modals: bottom sheet on phones, centered dialog on larger screens ── */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  background-color: rgb(0 0 0 / 0.6);
+  animation: modal-fade 150ms ease-out;
+}
+
+.modal-panel {
+  position: relative;
+  width: 100%;
+  max-height: 92dvh;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  border-width: 1px;
+  border-bottom-width: 0;
+  border-radius: 1.25rem 1.25rem 0 0;
+  padding: 1.75rem 1.25rem calc(1.25rem + env(safe-area-inset-bottom));
+  animation: sheet-up 220ms cubic-bezier(0.2, 0.9, 0.3, 1);
+}
+
+/* Grab handle hint on the sheet */
+.modal-panel::before {
+  content: "";
+  position: absolute;
+  top: 0.5rem;
+  left: 50%;
+  width: 2.5rem;
+  height: 0.25rem;
+  margin-left: -1.25rem;
+  border-radius: 9999px;
+  background-color: var(--text-muted);
+  opacity: 0.35;
+}
+
+@media (min-width: 640px) {
+  .modal-overlay {
+    align-items: center;
+    padding: 1rem;
+  }
+  .modal-panel {
+    border-bottom-width: 1px;
+    border-radius: 1rem;
+    padding: 1.25rem;
+    animation: modal-pop 150ms ease-out;
+  }
+  .modal-panel::before {
+    display: none;
+  }
+}
+
+@keyframes modal-fade { from { opacity: 0; } to { opacity: 1; } }
+@keyframes sheet-up { from { transform: translateY(100%); } to { transform: translateY(0); } }
+@keyframes modal-pop { from { opacity: 0; transform: scale(0.97); } to { opacity: 1; transform: scale(1); } }
+
+@media (prefers-reduced-motion: reduce) {
+  .modal-overlay, .modal-panel { animation: none; }
+}
+
+/* Chat pane fills the space between the mobile bars */
+.chat-pane {
+  height: calc(100dvh - var(--chrome-h) - 8.25rem);
+  min-height: 18rem;
+}
+@media (min-width: 768px) {
+  .chat-pane { height: calc(100dvh - 12rem); }
 }
 
 /* Prevent iOS Safari auto-zoom on input focus (requires font-size ≥ 16px on inputs) */
@@ -142,20 +213,11 @@ select option {
   color: var(--text-primary);
 }
 
-/* Make hardcoded slate utility backgrounds follow selected surface mode. */
-[data-surface="light"] .bg-slate-950 { background-color: var(--surface-950) !important; }
-[data-surface="light"] .bg-slate-900 { background-color: var(--surface-900) !important; }
-[data-surface="light"] .bg-slate-800 { background-color: var(--surface-800) !important; }
-[data-surface="light"] .bg-slate-700 { background-color: var(--surface-700) !important; }
-[data-surface="light"] .bg-slate-950\/60 { background-color: color-mix(in srgb, var(--surface-950) 60%, transparent) !important; }
-[data-surface="light"] .bg-slate-900\/60 { background-color: color-mix(in srgb, var(--surface-900) 60%, transparent) !important; }
-[data-surface="light"] .bg-slate-900\/40 { background-color: color-mix(in srgb, var(--surface-900) 40%, transparent) !important; }
-[data-surface="light"] .bg-slate-800\/60 { background-color: color-mix(in srgb, var(--surface-800) 60%, transparent) !important; }
-[data-surface="light"] .bg-slate-800\/50 { background-color: color-mix(in srgb, var(--surface-800) 50%, transparent) !important; }
-[data-surface="light"] .border-slate-800 { border-color: var(--surface-border) !important; }
-[data-surface="light"] .border-slate-700 { border-color: var(--surface-border) !important; }
-[data-surface="light"] .border-slate-600 { border-color: var(--surface-border) !important; }
-[data-surface="light"] .placeholder-slate-500::placeholder { color: #8b8b8b !important; }
+/* Text on accent-filled controls: white or dark, whichever reads on the accent */
+:is(.bg-accent-500, .bg-accent-600, .bg-accent-700, .bg-accent-700\/80).text-white,
+:is(.bg-accent-500, .bg-accent-600, .bg-accent-700) .text-white {
+  color: var(--on-accent);
+}
 
 /* Fix cursor / selection colors */
 ::selection {
@@ -175,6 +237,13 @@ select option {
     background-color: var(--surface-800);
     border-color: var(--surface-border);
     color: var(--text-primary);
+  }
+
+  /* Comfortable finger-sized fields on phones */
+  @media (max-width: 639px) {
+    .input-base {
+      min-height: 2.75rem;
+    }
   }
 
   /* Ensure select elements have proper styling */
@@ -197,7 +266,7 @@ select option {
   /* Active button - ensures accent bg has proper contrasting text */
   .btn-accent {
     @apply bg-accent-600 font-medium px-3 py-2 rounded-lg text-sm transition-colors;
-    color: white;
+    color: var(--on-accent);
   }
   .btn-accent:hover {
     @apply bg-accent-500;

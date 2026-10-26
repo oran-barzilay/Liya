@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { useTasks } from "../hooks/useTasks";
 import Icon from "../components/Icon";
 import AppCalendar from "../components/AppCalendar";
+import Fab from "../components/Fab";
 import { usePreferencesStore } from "../state/stores/preferencesStore";
 import { getTodayInTimeZone, utcIsoToDateInput, zonedDateTimeToUtcIso } from "../lib/datetime";
 
@@ -74,7 +75,7 @@ function RecurrenceField({ days, setDays, time, setTime }: {
         <div className="flex gap-1.5 flex-wrap">
           {DAY_LABELS.map((lbl, idx) => (
             <button key={idx} type="button" onClick={() => toggle(idx)}
-              className={"w-9 h-9 rounded-lg text-xs font-semibold border transition-colors " +
+              className={"w-10 h-10 sm:w-9 sm:h-9 rounded-lg text-sm sm:text-xs font-semibold border transition-colors " +
                 (days.includes(idx) ? "bg-accent-600 border-accent-600 text-white" : "border-slate-700 text-theme-muted hover:border-accent-500 hover:text-theme")}>
               {lbl}
             </button>
@@ -106,7 +107,7 @@ function AddTaskModal({ onClose, onAdd, members }: {
   const [recurTime, setRecurTime] = useState("09:00");
 
   return (
-    <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4 overflow-y-auto">
+    <div className="modal-overlay" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
       <form
         onSubmit={(e) => {
           e.preventDefault();
@@ -122,17 +123,17 @@ function AddTaskModal({ onClose, onAdd, members }: {
           });
           onClose();
         }}
-        className="bg-slate-900 border border-slate-700 rounded-2xl p-5 w-full max-w-md space-y-4 my-4"
+        className="modal-panel bg-slate-900 border-slate-700 sm:max-w-md space-y-4"
       >
         <div className="flex items-center justify-between">
           <h3 className="font-semibold text-theme">משימה חדשה</h3>
-          <button type="button" onClick={onClose} className="text-theme-muted hover:text-theme p-1"><Icon name="x" className="w-4 h-4" /></button>
+          <button type="button" onClick={onClose} className="-m-2 p-2 rounded-lg text-theme-muted hover:text-theme" aria-label="סגור"><Icon name="x" className="w-5 h-5" /></button>
         </div>
 
         {/* Title */}
         <div>
           <label className="text-xs text-theme-muted block mb-1">כותרת *</label>
-          <input autoFocus required value={title} onChange={(e) => setTitle(e.target.value)} className="input-base w-full" placeholder="שם המשימה" />
+          <input autoFocus required value={title} onChange={(e) => setTitle(e.target.value)} className="input-base w-full" placeholder="שם המשימה" enterKeyHint="done" />
         </div>
 
         {/* One-time vs Recurring */}
@@ -205,7 +206,7 @@ function AddTaskModal({ onClose, onAdd, members }: {
           <textarea value={desc} onChange={(e) => setDesc(e.target.value)} rows={2} className="input-base w-full resize-none" placeholder="פרטים נוספים..." />
         </div>
 
-        <button type="submit" className="w-full bg-accent-600 hover:bg-accent-500 text-white font-medium py-2.5 rounded-lg text-sm transition-colors">
+        <button type="submit" className="w-full bg-accent-600 hover:bg-accent-500 text-white font-medium py-3 sm:py-2.5 rounded-xl sm:rounded-lg text-sm transition-colors">
           הוסף משימה
         </button>
       </form>
@@ -234,7 +235,7 @@ function EditTaskModal({ task, onClose, onSave, members }: {
   });
 
   return (
-    <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4 overflow-y-auto">
+    <div className="modal-overlay" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
       <form
         onSubmit={(e) => {
           e.preventDefault();
@@ -248,15 +249,15 @@ function EditTaskModal({ task, onClose, onSave, members }: {
           });
           onClose();
         }}
-        className="bg-slate-900 border border-slate-700 rounded-2xl p-5 w-full max-w-md space-y-4 my-4"
+        className="modal-panel bg-slate-900 border-slate-700 sm:max-w-md space-y-4"
       >
         <div className="flex items-center justify-between">
           <h3 className="font-semibold text-theme">עריכת משימה</h3>
-          <button type="button" onClick={onClose} className="text-theme-muted hover:text-theme p-1"><Icon name="x" className="w-4 h-4" /></button>
+          <button type="button" onClick={onClose} className="-m-2 p-2 rounded-lg text-theme-muted hover:text-theme" aria-label="סגור"><Icon name="x" className="w-5 h-5" /></button>
         </div>
         <div>
           <label className="text-xs text-theme-muted block mb-1">כותרת *</label>
-          <input autoFocus required value={title} onChange={(e) => setTitle(e.target.value)} className="input-base w-full" />
+          <input required value={title} onChange={(e) => setTitle(e.target.value)} className="input-base w-full" />
         </div>
         <div className="grid grid-cols-2 gap-3">
           <div>
@@ -315,7 +316,7 @@ function EditTaskModal({ task, onClose, onSave, members }: {
             </button>
           </div>
         </div>
-        <button type="submit" className="w-full bg-accent-600 hover:bg-accent-500 text-white font-medium py-2.5 rounded-lg text-sm transition-colors">שמור שינויים</button>
+        <button type="submit" className="w-full bg-accent-600 hover:bg-accent-500 text-white font-medium py-3 sm:py-2.5 rounded-xl sm:rounded-lg text-sm transition-colors">שמור שינויים</button>
       </form>
     </div>
   );
@@ -386,49 +387,62 @@ export default function Tasks() {
     const isDone = task.status === "done";
     const isInProgress = task.status === "in_progress";
 
+    const meta = (
+      <>
+        {task.priority_level && !isDone && (
+          <span className={"text-[11px] sm:text-[10px] px-1.5 py-0.5 rounded-full font-semibold " + (PRIORITY_BADGE[task.priority_level] ?? "")}>
+            {PRIORITY_LABEL[task.priority_level] ?? `P${task.priority_level}`}
+          </span>
+        )}
+        {relDate && (
+          <span className={"text-[11px] font-medium " + relDate.cls}>{relDate.text}</span>
+        )}
+      </>
+    );
+
     return (
-      <div className={"flex items-center gap-3 rounded-xl border px-4 py-3 transition-colors " +
+      <div className={"flex items-center gap-1 sm:gap-2 rounded-xl border ps-1 pe-1 sm:ps-2 sm:pe-2 py-1 sm:py-1.5 transition-colors " +
         (isDone ? "border-slate-800/50 bg-slate-950/30 opacity-60"
           : isInProgress ? "border-accent-800/60 bg-accent-950/20"
           : "border-slate-800 bg-slate-900")}>
-        {/* Checkbox */}
+        {/* Checkbox – large hit area around a small circle */}
         <button
           onClick={() => handleStatusChange(task.id, isDone ? "todo" : "done", task)}
-          className={"w-5 h-5 rounded-full border-2 shrink-0 flex items-center justify-center transition-colors " +
+          className="p-2.5 shrink-0 rounded-lg"
+          aria-label={isDone ? "סמן כלא בוצע" : "סמן כבוצע"}
+        >
+          <span className={"w-6 h-6 sm:w-5 sm:h-5 rounded-full border-2 flex items-center justify-center transition-colors " +
             (isDone ? "bg-emerald-600 border-emerald-600" : isInProgress ? "border-accent-500" : "border-slate-600 hover:border-slate-400")}>
-          {isDone && <Icon name="check" className="w-3 h-3 text-white" />}
-          {isInProgress && <div className="w-2 h-2 rounded-full bg-accent-400" />}
+            {isDone && <Icon name="check" className="w-3.5 h-3.5 sm:w-3 sm:h-3 text-white" />}
+            {isInProgress && <span className="w-2 h-2 rounded-full bg-accent-400" />}
+          </span>
         </button>
 
-        {/* Content */}
-        <div className="flex-1 min-w-0">
+        {/* Content – tap to edit */}
+        <button type="button" onClick={() => setEditingTask(task)} className="flex-1 min-w-0 text-right py-1.5">
           <div className="flex items-center gap-1.5 flex-wrap">
             {task.is_recurring && <Icon name="repeat" className="w-3 h-3 text-accent-400 shrink-0" />}
-            <span className={"text-sm font-medium leading-snug " + (isDone ? "line-through text-theme-muted" : "text-theme")}>
+            <span className={"text-[15px] sm:text-sm font-medium leading-snug " + (isDone ? "line-through text-theme-muted" : "text-theme")}>
               {task.title}
             </span>
             {isInProgress && (
-              <span className="text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-accent-900 text-accent-300">בביצוע</span>
+              <span className="text-[11px] sm:text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-accent-900 text-accent-300">בביצוע</span>
             )}
           </div>
           {task.description && <p className="text-xs text-theme-muted truncate mt-0.5 opacity-70">{task.description}</p>}
-        </div>
+          {(relDate || (task.priority_level && !isDone)) && (
+            <div className="flex items-center gap-2 mt-1 sm:hidden">{meta}</div>
+          )}
+        </button>
 
-        {/* Meta */}
-        <div className="flex items-center gap-2 shrink-0">
-          {task.priority_level && !isDone && (
-            <span className={"text-[10px] px-1.5 py-0.5 rounded-full font-semibold " + (PRIORITY_BADGE[task.priority_level] ?? "")}>
-              {PRIORITY_LABEL[task.priority_level] ?? `P${task.priority_level}`}
-            </span>
-          )}
-          {relDate && (
-            <span className={"text-[11px] font-medium " + relDate.cls}>{relDate.text}</span>
-          )}
-          <button onClick={() => setEditingTask(task)} className="p-1.5 text-slate-600 hover:text-accent-400 rounded-lg hover:bg-slate-800 transition-colors">
-            <Icon name="edit" className="w-3.5 h-3.5" />
+        {/* Meta + actions */}
+        <div className="hidden sm:flex items-center gap-2 shrink-0">{meta}</div>
+        <div className="flex items-center shrink-0">
+          <button onClick={() => setEditingTask(task)} className="hidden sm:block p-2 text-slate-600 hover:text-accent-400 rounded-lg hover:bg-slate-800 transition-colors" aria-label="עריכה">
+            <Icon name="edit" className="w-4 h-4" />
           </button>
-          <button onClick={() => setPendingDelete(task.id)} className="p-1.5 text-slate-600 hover:text-danger rounded-lg hover:bg-slate-800 transition-colors">
-            <Icon name="trash" className="w-3.5 h-3.5" />
+          <button onClick={() => setPendingDelete(task.id)} className="p-2.5 sm:p-2 text-slate-600 hover:text-danger rounded-lg hover:bg-slate-800 transition-colors" aria-label="מחיקה">
+            <Icon name="trash" className="w-4 h-4" />
           </button>
         </div>
       </div>
@@ -446,16 +460,16 @@ export default function Tasks() {
             {doneTasks.length > 0 && <span className="opacity-50"> · {doneTasks.length} הושלמו</span>}
           </p>
         </div>
-        <button onClick={() => setShowModal(true)} className="bg-accent-600 hover:bg-accent-500 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors flex items-center gap-1.5">
+        <button onClick={() => setShowModal(true)} className="hidden md:flex bg-accent-600 hover:bg-accent-500 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors items-center gap-1.5">
           <Icon name="plus" className="w-3.5 h-3.5" /> הוספת משימה
         </button>
       </div>
 
       {/* Scope tabs */}
-      <div className="mb-4 flex flex-wrap items-center gap-2">
+      <div className="mb-3 grid grid-cols-3 sm:flex sm:flex-wrap items-center gap-2">
         {([["daily", "היומיום"], ["shopping", "קניות"], ["all", "הכול"]] as const).map(([scope, label]) => (
           <button key={scope} onClick={() => setTaskScope(scope)}
-            className={"px-3 py-1.5 rounded-lg text-xs font-medium transition-colors border " +
+            className={"px-3 py-2.5 sm:py-1.5 rounded-xl sm:rounded-lg text-sm sm:text-xs font-medium transition-colors border " +
               (taskScope === scope ? "bg-accent-700 border-accent-600 text-white" : "bg-slate-900 border-slate-800 text-theme-muted hover:text-theme")}>
             {label}
           </button>
@@ -463,27 +477,27 @@ export default function Tasks() {
       </div>
 
       {/* Filters row */}
-      <div className="mb-5 flex flex-wrap items-center gap-2">
-        <div className="flex rounded-lg bg-slate-900 border border-slate-800 p-0.5">
+      <div className="mb-5 -mx-3 px-3 sm:mx-0 sm:px-0 flex flex-nowrap sm:flex-wrap items-center gap-2 overflow-x-auto no-scrollbar">
+        <div className="flex shrink-0 rounded-lg bg-slate-900 border border-slate-800 p-0.5">
           {([["all", "הכל"], ["recurring", "חזרתיות"], ["one_time", "חד-פעמיות"]] as const).map(([value, label]) => (
             <button key={value} onClick={() => setRecurrenceFilter(value)}
-              className={"px-3 py-1.5 rounded-md text-xs font-medium transition-colors " +
+              className={"px-3 py-2 sm:py-1.5 rounded-md text-xs font-medium whitespace-nowrap transition-colors " +
                 (recurrenceFilter === value ? "bg-accent-700 text-white" : "text-theme-muted hover:text-theme")}>
               {label}
             </button>
           ))}
         </div>
-        <div className="flex rounded-lg bg-slate-900 border border-slate-800 p-0.5">
+        <div className="flex shrink-0 rounded-lg bg-slate-900 border border-slate-800 p-0.5">
           {(["all", "priority", "time_sensitive"] as const).map((f) => (
             <button key={f} onClick={() => setFilterType(f)}
-              className={"px-3 py-1.5 rounded-md text-xs font-medium transition-colors " +
+              className={"px-3 py-2 sm:py-1.5 rounded-md text-xs font-medium whitespace-nowrap transition-colors " +
                 (filterType === f ? "bg-slate-700 text-theme" : "text-theme-muted hover:text-theme")}>
               {f === "all" ? "הכל" : f === "priority" ? "רגילות" : "מתוזמנות"}
             </button>
           ))}
         </div>
         {members.length > 0 && (
-          <select value={filterAssignee} onChange={(e) => setFilterAssignee(e.target.value)} className="input-base text-xs py-1.5">
+          <select value={filterAssignee} onChange={(e) => setFilterAssignee(e.target.value)} className="input-base text-xs py-1.5 shrink-0">
             <option value="all">כל המשפחה</option>
             <option value="">ללא אחראי</option>
             {members.map((m) => <option key={m.id} value={m.id}>{m.display_name}</option>)}
@@ -499,8 +513,8 @@ export default function Tasks() {
             <span className="text-sm text-warning">{openShoppingCount} פריטים לקנייה ממתינים</span>
           </div>
           <div className="flex gap-2 shrink-0">
-              <button onClick={() => setTaskScope("shopping")} className="px-3 py-1.5 rounded-lg bg-accent-600 hover:bg-accent-500 text-white text-xs font-medium">הצג</button>
-            <button onClick={() => navigate("/inventory")} className="px-3 py-1.5 rounded-lg bg-slate-800 border border-slate-700 hover:bg-slate-700 text-theme text-xs">לרשימה</button>
+              <button onClick={() => setTaskScope("shopping")} className="px-3 py-2 sm:py-1.5 rounded-lg bg-accent-600 hover:bg-accent-500 text-white text-xs font-medium">הצג</button>
+            <button onClick={() => navigate("/inventory")} className="px-3 py-2 sm:py-1.5 rounded-lg bg-slate-800 border border-slate-700 hover:bg-slate-700 text-theme text-xs">לרשימה</button>
           </div>
         </div>
       )}
@@ -529,7 +543,7 @@ export default function Tasks() {
         <div className="mt-5">
           <button
             onClick={() => setShowDone(s => !s)}
-            className="flex items-center gap-2 text-xs text-theme-muted hover:text-theme transition-colors mb-2 w-full"
+            className="flex items-center gap-2 text-xs text-theme-muted hover:text-theme transition-colors mb-2 w-full py-2"
           >
             <Icon name={showDone ? "chevron-up" : "chevron-down"} className="w-3.5 h-3.5" />
             <span>{doneTasks.length} משימות שהושלמו</span>
@@ -543,20 +557,23 @@ export default function Tasks() {
         </div>
       )}
 
+      <div className="h-20 md:hidden" aria-hidden="true" />
+      <Fab label="משימה" onClick={() => setShowModal(true)} />
+
       {/* Modals */}
       {showModal && <AddTaskModal onClose={() => setShowModal(false)} onAdd={(task) => createTask.mutate(task)} members={members as Array<{ id: string; display_name: string }>} />}
       {editingTask && <EditTaskModal task={editingTask} onClose={() => setEditingTask(null)} onSave={(t) => updateTask.mutate(t)} members={members as Array<{ id: string; display_name: string }>} />}
       {pendingDelete && (
-        <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4">
-          <div className="w-full max-w-sm rounded-2xl border border-slate-700 bg-slate-900 p-5">
+        <div className="modal-overlay" onClick={(e) => { if (e.target === e.currentTarget) setPendingDelete(null); }}>
+          <div className="modal-panel sm:max-w-sm border-slate-700 bg-slate-900">
             <div className="flex items-center gap-2 mb-1">
               <Icon name="warning" className="w-5 h-5 text-danger" />
               <h3 className="text-base font-semibold text-theme">למחוק משימה זו?</h3>
             </div>
             <p className="text-sm text-theme-muted mt-1">הפעולה אינה ניתנת לביטול.</p>
-            <div className="flex justify-end gap-2 mt-4">
-              <button onClick={() => setPendingDelete(null)} className="px-4 py-2 rounded-lg text-sm bg-slate-800 text-theme-muted hover:bg-slate-700">ביטול</button>
-              <button onClick={() => { deleteTask.mutate(pendingDelete); setPendingDelete(null); }} className="px-4 py-2 rounded-lg text-sm bg-red-600 text-white hover:bg-red-500">מחיקה</button>
+            <div className="grid grid-cols-2 gap-2 mt-5 sm:flex sm:justify-end sm:mt-4">
+              <button onClick={() => setPendingDelete(null)} className="px-4 py-2.5 sm:py-2 rounded-xl sm:rounded-lg text-sm font-medium bg-slate-800 text-theme-muted hover:bg-slate-700">ביטול</button>
+              <button onClick={() => { deleteTask.mutate(pendingDelete); setPendingDelete(null); }} className="px-4 py-2.5 sm:py-2 rounded-xl sm:rounded-lg text-sm font-medium bg-red-600 text-white hover:bg-red-500">מחיקה</button>
             </div>
           </div>
         </div>

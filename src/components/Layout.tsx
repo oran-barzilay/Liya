@@ -1,8 +1,8 @@
-import { useState } from "react";
-import { NavLink, useNavigate } from "react-router-dom";
+import { useEffect, useState } from "react";
+import { NavLink, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../contexts/AuthContext";
 import { useProfile } from "../hooks/useProfile";
-import { useThemeStore, getContrastColor } from "../state/stores/themeStore";
+import { useThemeStore } from "../state/stores/themeStore";
 import Icon from "./Icon";
 
 const NAV_ITEMS = [
@@ -15,30 +15,41 @@ const NAV_ITEMS = [
   { to: "/assistant", icon: "chat"      as const, label: "צ'אט"    },
 ] as const;
 
+/** Mobile tab bar shows these directly; the rest live in the "עוד" sheet */
+const MOBILE_PRIMARY = ["/", "/tasks", "/inventory", "/baby"] as const;
+const MOBILE_TABS = NAV_ITEMS.filter(item => (MOBILE_PRIMARY as readonly string[]).includes(item.to));
+const MOBILE_MORE = NAV_ITEMS.filter(item => !(MOBILE_PRIMARY as readonly string[]).includes(item.to));
+
 export default function Layout({ children }: { children: React.ReactNode }) {
   const { user, signOut } = useAuth();
   const { data: profile } = useProfile();
-  const { menuBg, appBg, accentCustom, accentColor, appName } = useThemeStore();
+  const { menuBg, appBg, appName } = useThemeStore();
   const navigate = useNavigate();
+  const { pathname } = useLocation();
 
-  // Desktop sidebar collapse / mobile overlay
+  // Desktop sidebar collapse / mobile "more" sheet
   const [collapsed, setCollapsed]     = useState(false);
   const [mobileOpen, setMobileOpen]   = useState(false);
 
-  const menuContrast    = getContrastColor(menuBg);
-  const accentHex       = accentColor === "custom" ? accentCustom
-    : ({ indigo:"#4f46e5", purple:"#9333ea", blue:"#2563eb", emerald:"#059669", rose:"#e11d48", amber:"#d97706" } as Record<string,string>)[accentColor] ?? "#4f46e5";
-  const accentContrast  = getContrastColor(accentHex);
-  const activeTextColor = accentContrast === "dark" ? "text-slate-900" : "text-white";
+  // Close the sheet on route change and start each page at the top
+  useEffect(() => {
+    setMobileOpen(false);
+    document.getElementById("app-main")?.scrollTo({ top: 0 });
+  }, [pathname]);
 
-  const menuText      = menuContrast === "dark" ? "text-slate-700"  : "text-slate-300";
-  const menuTextMuted = menuContrast === "dark" ? "text-slate-500"  : "text-slate-400";
-  const menuBorder    = menuContrast === "dark" ? "border-slate-200": "border-slate-800";
-  const menuHover     = menuContrast === "dark"
-    ? "hover:bg-slate-200 hover:text-slate-900"
-    : "hover:bg-slate-800 hover:text-white";
-  const menuActive    = `bg-accent-600 ${activeTextColor}`;
-  const titleColor    = "text-accent-400";
+  const moreActive = pathname === "/settings" || MOBILE_MORE.some(item => pathname.startsWith(item.to));
+  const currentLabel = [...NAV_ITEMS, { to: "/settings", label: "הגדרות" }].find(item =>
+    item.to === "/" ? pathname === "/" : pathname.startsWith(item.to)
+  )?.label;
+
+  // Menu colors come from CSS vars computed against menuBg (src/lib/themeVars.ts)
+  const menuText      = "text-[color:var(--menu-text)]";
+  const menuTextMuted = "text-[color:var(--menu-muted)]";
+  const menuBorder    = "border-[color:var(--menu-border)]";
+  const menuHover     = "hover:bg-[color:var(--menu-hover)] hover:text-[color:var(--menu-strong)]";
+  const menuActive    = "bg-accent-600 text-white";
+  const titleColor    = "text-[color:var(--menu-accent)]";
+  const menuAccent    = "text-[color:var(--menu-accent)]";
 
   const handleSignOut = async () => {
     setMobileOpen(false);
@@ -46,23 +57,23 @@ export default function Layout({ children }: { children: React.ReactNode }) {
     navigate("/login");
   };
 
-  /** Shared nav link list used in both desktop sidebar and mobile overlay */
-  const NavList = ({ big = false, onNavigate }: { big?: boolean; onNavigate?: () => void }) => (
+  /** Desktop sidebar nav link list */
+  const NavList = () => (
     <>
       {NAV_ITEMS.map(item => (
         <NavLink
           key={item.to}
           to={item.to}
           end={item.to === "/"}
-          onClick={onNavigate}
+          title={collapsed ? item.label : undefined}
           className={({ isActive }) =>
             `flex items-center gap-3 rounded-lg font-medium transition-colors
-             ${big ? "px-4 py-3 text-sm" : collapsed ? "justify-center px-2 py-2.5" : "px-3 py-2.5 text-sm"}
+             ${collapsed ? "justify-center px-2 py-2.5" : "px-3 py-2.5 text-sm"}
              ${isActive ? menuActive : `${menuText} ${menuHover}`}`
           }
         >
-          <Icon name={item.icon} className={big ? "w-5 h-5 shrink-0" : "w-5 h-5 shrink-0"} />
-          {(!collapsed || big) && <span>{item.label}</span>}
+          <Icon name={item.icon} className="w-5 h-5 shrink-0" />
+          {!collapsed && <span>{item.label}</span>}
         </NavLink>
       ))}
     </>
@@ -131,119 +142,133 @@ export default function Layout({ children }: { children: React.ReactNode }) {
       {/* ════════════════════════════════════════
           MOBILE TOP BAR
       ════════════════════════════════════════ */}
-      <div
-        className={`md:hidden fixed top-0 inset-x-0 z-40 flex items-center justify-between px-4 h-14 border-b ${menuBorder}`}
+      <header
+        className={`md:hidden fixed top-0 inset-x-0 z-40 border-b pt-safe ${menuBorder}`}
         style={{ backgroundColor: menuBg }}
       >
-        {/* Hamburger */}
-        <button
-          onClick={() => setMobileOpen(true)}
-          className={`p-2 rounded-lg transition-colors ${menuTextMuted} ${menuHover}`}
-          aria-label="פתח תפריט"
-        >
-          <Icon name="menu" className="w-6 h-6" />
-        </button>
+        <div className="flex items-center justify-between gap-3 px-4 h-14">
+          <div className="min-w-0 flex items-baseline gap-2">
+            <h1 className={`text-lg font-bold shrink-0 ${titleColor}`}>{appName}</h1>
+            {currentLabel && pathname !== "/" && (
+              <span className={`text-sm truncate ${menuTextMuted}`}>· {currentLabel}</span>
+            )}
+          </div>
 
-        <h1 className={`text-lg font-bold ${titleColor}`}>{appName}</h1>
-
-        {/* Settings shortcut */}
-        <NavLink
-          to="/settings"
-          className={({ isActive }) =>
-            `p-2 rounded-lg transition-colors ${isActive ? `text-accent-400` : `${menuTextMuted} ${menuHover}`}`
-          }
-          aria-label="הגדרות"
-        >
-          <Icon name="settings" className="w-5 h-5" />
-        </NavLink>
-      </div>
+          {/* Settings shortcut */}
+          <NavLink
+            to="/settings"
+            className={({ isActive }) =>
+              `-me-2 p-2.5 rounded-xl transition-colors ${isActive ? menuAccent : `${menuTextMuted} ${menuHover}`}`
+            }
+            aria-label="הגדרות"
+          >
+            <Icon name="settings" className="w-5 h-5" />
+          </NavLink>
+        </div>
+      </header>
 
       {/* ════════════════════════════════════════
-          MOBILE OVERLAY SIDEBAR
+          MOBILE "MORE" SHEET
       ════════════════════════════════════════ */}
       {mobileOpen && (
-        <div className="md:hidden fixed inset-0 z-50 flex">
-          {/* Backdrop */}
-          <div className="absolute inset-0 bg-black/60" onClick={() => setMobileOpen(false)} />
-          {/* Drawer panel — anchored to physical right side */}
-          <aside
-            className={`absolute inset-y-0 right-0 z-10 flex flex-col w-72 max-w-[92vw] border-s ${menuBorder}`}
+        <div className="md:hidden modal-overlay" onClick={() => setMobileOpen(false)}>
+          <div
+            className={`modal-panel ${menuBorder}`}
             style={{ backgroundColor: menuBg }}
+            onClick={e => e.stopPropagation()}
+            role="dialog"
+            aria-label="תפריט נוסף"
           >
-            {/* Header */}
-            <div className={`flex items-center justify-between px-5 py-4 border-b ${menuBorder}`}>
+            <div className="flex items-center justify-between mb-4">
               <div className="min-w-0">
-                <h1 className={`text-xl font-bold ${titleColor}`}>{appName}</h1>
+                <h2 className={`text-lg font-bold ${titleColor}`}>{appName}</h2>
                 <p className={`text-xs truncate mt-0.5 ${menuTextMuted}`}>{profile?.display_name ?? user?.email ?? ""}</p>
               </div>
               <button
                 onClick={() => setMobileOpen(false)}
-                className={`shrink-0 p-1.5 rounded-lg transition-colors ${menuTextMuted} ${menuHover}`}
+                className={`shrink-0 -me-2 p-2.5 rounded-xl transition-colors ${menuTextMuted} ${menuHover}`}
+                aria-label="סגור"
               >
                 <Icon name="x" className="w-5 h-5" />
               </button>
             </div>
 
-            {/* Nav */}
-            <nav className="flex-1 py-3 space-y-0.5 px-3 overflow-y-auto">
-              <NavList big onNavigate={() => setMobileOpen(false)} />
-            </nav>
-
-            {/* Settings + Logout */}
-            <div className={`px-3 py-3 border-t ${menuBorder} space-y-0.5`}>
-              <NavLink
-                to="/settings"
-                onClick={() => setMobileOpen(false)}
-                className={({ isActive }) =>
-                  `flex items-center gap-3 px-4 py-3 rounded-lg text-sm transition-colors
-                   ${isActive ? menuActive : `${menuTextMuted} ${menuHover}`}`
-                }
-              >
-                <Icon name="settings" className="w-5 h-5" /> הגדרות
-              </NavLink>
-              <button
-                onClick={handleSignOut}
-                className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm transition-colors ${menuTextMuted} ${menuHover}`}
-              >
-                <Icon name="logout" className="w-5 h-5" /> התנתק
-              </button>
+            <div className="grid grid-cols-3 gap-2">
+              {[...MOBILE_MORE, { to: "/settings", icon: "settings" as const, label: "הגדרות" }].map(item => (
+                <NavLink
+                  key={item.to}
+                  to={item.to}
+                  className={({ isActive }) =>
+                    `flex flex-col items-center justify-center gap-1.5 rounded-2xl border py-4 text-sm font-medium transition-colors
+                     ${isActive ? `${menuActive} border-transparent` : `${menuText} ${menuBorder} ${menuHover}`}`
+                  }
+                >
+                  <Icon name={item.icon} className="w-6 h-6" />
+                  {item.label}
+                </NavLink>
+              ))}
             </div>
-          </aside>
+
+            <button
+              onClick={handleSignOut}
+              className={`mt-4 w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl border text-sm transition-colors ${menuBorder} ${menuTextMuted} ${menuHover}`}
+            >
+              <Icon name="logout" className="w-5 h-5" /> התנתק
+            </button>
+          </div>
         </div>
       )}
 
       {/* ════════════════════════════════════════
           MAIN CONTENT
       ════════════════════════════════════════ */}
-      <main className="flex-1 overflow-y-auto pt-14 pb-16 md:pt-0 md:pb-0">
-        <div className="p-3 sm:p-4 md:p-6 max-w-6xl mx-auto">{children}</div>
+      <main id="app-main" className="app-main flex-1 overflow-y-auto">
+        <div className="px-3 pt-4 pb-6 sm:px-4 md:p-6 max-w-6xl mx-auto">{children}</div>
       </main>
 
       {/* ════════════════════════════════════════
           MOBILE BOTTOM NAVIGATION
       ════════════════════════════════════════ */}
       <nav
-        className={`md:hidden fixed bottom-0 inset-x-0 z-40 flex border-t ${menuBorder}`}
+        className={`md:hidden fixed bottom-0 inset-x-0 z-40 border-t pb-safe ${menuBorder}`}
         style={{ backgroundColor: menuBg }}
+        aria-label="ניווט ראשי"
       >
-        {NAV_ITEMS.map(item => (
-          <NavLink
-            key={item.to}
-            to={item.to}
-            end={item.to === "/"}
-            className={({ isActive }) =>
-              `flex-1 flex flex-col items-center justify-center py-2 gap-0.5 min-w-0 transition-colors
-               ${isActive ? "text-accent-400" : menuTextMuted}`
-            }
+        <div className="flex h-16">
+          {MOBILE_TABS.map(item => (
+            <NavLink
+              key={item.to}
+              to={item.to}
+              end={item.to === "/"}
+              className={({ isActive }) =>
+                `flex-1 flex flex-col items-center justify-center gap-1 min-w-0 transition-colors
+                 ${isActive ? menuAccent : menuTextMuted}`
+              }
+            >
+              {({ isActive }) => (
+                <>
+                  <span className={`flex items-center justify-center w-14 h-8 rounded-full transition-colors ${isActive ? "bg-accent-500/15" : ""}`}>
+                    <Icon name={item.icon} className="w-6 h-6 shrink-0" />
+                  </span>
+                  <span className={`text-[11px] leading-none truncate max-w-full px-0.5 ${isActive ? "font-semibold" : "font-medium"}`}>{item.label}</span>
+                </>
+              )}
+            </NavLink>
+          ))}
+          <button
+            type="button"
+            onClick={() => setMobileOpen(true)}
+            className={`flex-1 flex flex-col items-center justify-center gap-1 min-w-0 transition-colors
+              ${moreActive || mobileOpen ? menuAccent : menuTextMuted}`}
+            aria-label="עוד"
+            aria-expanded={mobileOpen}
           >
-            {({ isActive }) => (
-              <>
-                <Icon name={item.icon} className={`w-5 h-5 shrink-0 ${isActive ? "text-accent-400" : ""}`} />
-                <span className="text-[8px] font-medium leading-tight truncate w-full text-center px-0.5">{item.label}</span>
-              </>
-            )}
-          </NavLink>
-        ))}
+            <span className={`flex items-center justify-center w-14 h-8 rounded-full transition-colors ${moreActive ? "bg-accent-500/15" : ""}`}>
+              <Icon name="more" className="w-6 h-6 shrink-0" />
+            </span>
+            <span className={`text-[11px] leading-none ${moreActive ? "font-semibold" : "font-medium"}`}>עוד</span>
+          </button>
+        </div>
       </nav>
     </div>
   );

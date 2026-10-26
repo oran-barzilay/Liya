@@ -48,20 +48,20 @@ export default function Setup() {
     }
   };
   return (
-    <div className="min-h-screen bg-slate-950 flex items-center justify-center px-4">
+    <div className="min-h-[100dvh] bg-slate-950 flex items-center justify-center px-4 py-8">
       <div className="w-full max-w-sm">
         <div className="text-center mb-8">
           <Icon name="hand-wave" className="w-10 h-10 mx-auto mb-3 text-accent-400" />
-          <h1 className="text-2xl font-bold text-white">ברוך הבא ל-Fami</h1>
+          <h1 className="text-2xl font-bold text-theme">ברוך הבא ל-Fami</h1>
           <p className="text-slate-400 mt-2 text-sm">מחובר בתור <span className="text-accent-400">{user?.email}</span></p>
         </div>
         <div className="flex rounded-xl bg-slate-900 border border-slate-800 p-1 mb-4">
           <button type="button" onClick={() => { setMode("create"); setError(""); }}
-            className={"flex-1 py-2 rounded-lg text-sm font-medium transition-colors flex items-center justify-center gap-1.5 " + (mode === "create" ? "bg-accent-600 text-white" : "text-slate-400 hover:text-white")}>
+            className={"flex-1 py-2 rounded-lg text-sm font-medium transition-colors flex items-center justify-center gap-1.5 " + (mode === "create" ? "bg-accent-600 text-white" : "text-slate-400 hover:text-theme")}>
             <Icon name="home" className="w-4 h-4" /> בית חדש
           </button>
           <button type="button" onClick={() => { setMode("join"); setError(""); }}
-            className={"flex-1 py-2 rounded-lg text-sm font-medium transition-colors flex items-center justify-center gap-1.5 " + (mode === "join" ? "bg-accent-600 text-white" : "text-slate-400 hover:text-white")}>
+            className={"flex-1 py-2 rounded-lg text-sm font-medium transition-colors flex items-center justify-center gap-1.5 " + (mode === "join" ? "bg-accent-600 text-white" : "text-slate-400 hover:text-theme")}>
             <Icon name="link" className="w-4 h-4" /> הצטרף לבית
           </button>
         </div>
@@ -69,13 +69,13 @@ export default function Setup() {
           <div>
             <label className="block text-sm text-slate-300 mb-1.5">שמך</label>
             <input type="text" required value={displayName} onChange={e => setDisplayName(e.target.value)} placeholder="אורן"
-              className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2.5 text-sm text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-accent-500" />
+              className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2.5 text-sm text-theme placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-accent-500" />
           </div>
           {mode === "create" ? (
             <div>
               <label className="block text-sm text-slate-300 mb-1.5">שם הבית</label>
               <input type="text" required value={householdName} onChange={e => setHouseholdName(e.target.value)} placeholder="משפחת ברזילי"
-                className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2.5 text-sm text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-accent-500" />
+                className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2.5 text-sm text-theme placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-accent-500" />
               <p className="text-xs text-slate-500 mt-1.5">קטגוריות ברירת מחדל ייווצרו אוטומטית.</p>
             </div>
           ) : (
@@ -83,7 +83,7 @@ export default function Setup() {
               <label className="block text-sm text-slate-300 mb-1.5">מזהה הבית</label>
               <input type="text" required value={joinCode} onChange={e => setJoinCode(e.target.value)}
                 placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
-                className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2.5 text-sm text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-accent-500 font-mono" />
+                className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2.5 text-sm text-theme placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-accent-500 font-mono" />
               <p className="text-xs text-slate-500 mt-1.5">בקש מאורן לשתף את מזהה הבית מלוח הבקרה.</p>
             </div>
           )}

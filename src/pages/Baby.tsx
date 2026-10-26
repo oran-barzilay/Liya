@@ -97,16 +97,16 @@ function AddLogModal({ logType, lastAmount, onClose, onSave }: {
   };
 
   return (
-    <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
+    <div className="modal-overlay" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
       <form onSubmit={handleSubmit}
-        className="bg-slate-900 border border-slate-700 rounded-2xl p-5 w-full max-w-sm space-y-4 overflow-y-auto max-h-[92dvh]">
+        className="modal-panel bg-slate-900 border-slate-700 sm:max-w-sm space-y-4">
         <div className="flex items-center justify-between">
           <h3 className="font-semibold text-theme">{LOG_LABELS[logType] ?? logType}</h3>
-          <button type="button" onClick={onClose} className="text-theme-muted hover:text-theme"><Icon name="x" className="w-4 h-4" /></button>
+          <button type="button" onClick={onClose} className="-m-2 p-2 rounded-lg text-theme-muted hover:text-theme" aria-label="סגור"><Icon name="x" className="w-5 h-5" /></button>
         </div>
 
         {/* Date + time split is easier to edit than combined datetime picker */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+        <div className="grid grid-cols-2 gap-2">
           <AppCalendar
             mode="date"
             value={currentDate}
@@ -136,13 +136,13 @@ function AddLogModal({ logType, lastAmount, onClose, onSave }: {
             <label className="text-xs text-theme-muted block mb-1">כמות (מ״ל)</label>
             <div className="flex items-center gap-2">
               <button type="button" onClick={() => setAmount(a => Math.max(0, a - 30))}
-                className="w-10 h-10 rounded-lg bg-slate-800 border border-slate-700 flex items-center justify-center text-theme-muted hover:text-theme hover:bg-slate-700">
+                className="w-12 h-12 sm:w-10 sm:h-10 shrink-0 rounded-xl sm:rounded-lg bg-slate-800 border border-slate-700 flex items-center justify-center text-theme-muted hover:text-theme hover:bg-slate-700 active:bg-slate-700">
                 <Icon name="chevron-right" className="w-4 h-4" />
               </button>
-              <input type="number" min="0" step="5" value={amount} onChange={e => setAmount(Number(e.target.value))}
+              <input type="number" inputMode="numeric" min="0" step="5" value={amount} onChange={e => setAmount(Number(e.target.value))}
                 className="input-base w-full text-center text-lg font-bold" />
               <button type="button" onClick={() => setAmount(a => a + 30)}
-                className="w-10 h-10 rounded-lg bg-slate-800 border border-slate-700 flex items-center justify-center text-theme-muted hover:text-theme hover:bg-slate-700">
+                className="w-12 h-12 sm:w-10 sm:h-10 shrink-0 rounded-xl sm:rounded-lg bg-slate-800 border border-slate-700 flex items-center justify-center text-theme-muted hover:text-theme hover:bg-slate-700 active:bg-slate-700">
                 <Icon name="chevron-left" className="w-4 h-4" />
               </button>
             </div>
@@ -155,13 +155,13 @@ function AddLogModal({ logType, lastAmount, onClose, onSave }: {
             <label className="text-xs text-theme-muted block mb-1">משך (דקות)</label>
             <div className="flex items-center gap-2">
               <button type="button" onClick={() => setTummyMinutes(m => Math.max(1, m - 5))}
-                className="w-10 h-10 rounded-lg bg-slate-800 border border-slate-700 flex items-center justify-center text-theme-muted hover:text-theme hover:bg-slate-700">
+                className="w-12 h-12 sm:w-10 sm:h-10 shrink-0 rounded-xl sm:rounded-lg bg-slate-800 border border-slate-700 flex items-center justify-center text-theme-muted hover:text-theme hover:bg-slate-700 active:bg-slate-700">
                 <Icon name="chevron-right" className="w-4 h-4" />
               </button>
-              <input type="number" min="1" step="1" value={tummyMinutes} onChange={e => setTummyMinutes(Number(e.target.value))}
+              <input type="number" inputMode="numeric" min="1" step="1" value={tummyMinutes} onChange={e => setTummyMinutes(Number(e.target.value))}
                 className="input-base w-full text-center text-lg font-bold" />
               <button type="button" onClick={() => setTummyMinutes(m => m + 5)}
-                className="w-10 h-10 rounded-lg bg-slate-800 border border-slate-700 flex items-center justify-center text-theme-muted hover:text-theme hover:bg-slate-700">
+                className="w-12 h-12 sm:w-10 sm:h-10 shrink-0 rounded-xl sm:rounded-lg bg-slate-800 border border-slate-700 flex items-center justify-center text-theme-muted hover:text-theme hover:bg-slate-700 active:bg-slate-700">
                 <Icon name="chevron-left" className="w-4 h-4" />
               </button>
             </div>
@@ -173,10 +173,10 @@ function AddLogModal({ logType, lastAmount, onClose, onSave }: {
         {logType === "diaper_change" && (
           <div>
             <label className="text-xs text-theme-muted block mb-1">סוג (ניתן לבחור מספר)</label>
-            <div className="flex gap-2">
+            <div className="grid grid-cols-3 gap-2">
               {DIAPER_TYPES.map(dt => (
                 <button key={dt.id} type="button" onClick={() => toggleDiaper(dt.id)}
-                  className={"px-3 py-1.5 rounded-lg text-sm font-medium border transition-colors " +
+                  className={"px-3 py-3 sm:py-1.5 rounded-xl sm:rounded-lg text-sm font-medium border transition-colors " +
                     (diaperTypes.includes(dt.id) ? "bg-accent-600 border-accent-500 text-white" : "bg-slate-800 border-slate-700 text-theme-muted hover:border-slate-500")
                   }>
                   {dt.label}
@@ -192,7 +192,7 @@ function AddLogModal({ logType, lastAmount, onClose, onSave }: {
           <input value={notes} onChange={e => setNotes(e.target.value)} className="input-base w-full" placeholder="אופציונלי" />
         </div>
 
-        <button type="submit" className="w-full bg-accent-600 hover:bg-accent-500 text-white font-medium py-2 rounded-lg text-sm transition-colors">
+        <button type="submit" className="w-full bg-accent-600 hover:bg-accent-500 text-white font-medium py-3 sm:py-2 rounded-xl sm:rounded-lg text-sm transition-colors">
           שמור
         </button>
       </form>
@@ -209,16 +209,16 @@ function EditLogModal({ log, onClose, onSave }: { log: Row; onClose: () => void;
   const isTummy = log.log_type === "tummy_time";
 
   return (
-    <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
+    <div className="modal-overlay" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
       <form onSubmit={e => {
         e.preventDefault();
         onSave({ id: log.id, event_at: zonedDateTimeToUtcIso(eventAt, timeZone), amount: (log.log_type === "feeding" || isTummy) ? amount : log.amount, notes: notes || null });
         onClose();
       }}
-        className="bg-slate-900 border border-slate-700 rounded-2xl p-5 w-full max-w-sm space-y-4 overflow-y-auto max-h-[92dvh]">
+        className="modal-panel bg-slate-900 border-slate-700 sm:max-w-sm space-y-4">
         <div className="flex items-center justify-between">
           <h3 className="font-semibold text-theme">עריכת {LOG_LABELS[log.log_type] ?? log.log_type}</h3>
-          <button type="button" onClick={onClose} className="text-theme-muted hover:text-theme"><Icon name="x" className="w-4 h-4" /></button>
+          <button type="button" onClick={onClose} className="-m-2 p-2 rounded-lg text-theme-muted hover:text-theme" aria-label="סגור"><Icon name="x" className="w-5 h-5" /></button>
         </div>
 
         <AppCalendar mode="datetime" value={eventAt} onChange={setEventAt} label="זמן" inline />
@@ -228,13 +228,13 @@ function EditLogModal({ log, onClose, onSave }: { log: Row; onClose: () => void;
             <label className="text-xs text-theme-muted block mb-1">כמות (מ״ל)</label>
             <div className="flex items-center gap-2">
               <button type="button" onClick={() => setAmount((a: number) => Math.max(0, a - 30))}
-                className="w-10 h-10 rounded-lg bg-slate-800 border border-slate-700 flex items-center justify-center text-theme-muted hover:text-theme">
+                className="w-12 h-12 sm:w-10 sm:h-10 shrink-0 rounded-xl sm:rounded-lg bg-slate-800 border border-slate-700 flex items-center justify-center text-theme-muted hover:text-theme active:bg-slate-700">
                 <Icon name="chevron-right" className="w-4 h-4" />
               </button>
-              <input type="number" min="0" step="5" value={amount} onChange={e => setAmount(Number(e.target.value))}
+              <input type="number" inputMode="numeric" min="0" step="5" value={amount} onChange={e => setAmount(Number(e.target.value))}
                 className="input-base w-full text-center text-lg font-bold" />
               <button type="button" onClick={() => setAmount((a: number) => a + 30)}
-                className="w-10 h-10 rounded-lg bg-slate-800 border border-slate-700 flex items-center justify-center text-theme-muted hover:text-theme">
+                className="w-12 h-12 sm:w-10 sm:h-10 shrink-0 rounded-xl sm:rounded-lg bg-slate-800 border border-slate-700 flex items-center justify-center text-theme-muted hover:text-theme active:bg-slate-700">
                 <Icon name="chevron-left" className="w-4 h-4" />
               </button>
             </div>
@@ -245,13 +245,13 @@ function EditLogModal({ log, onClose, onSave }: { log: Row; onClose: () => void;
             <label className="text-xs text-theme-muted block mb-1">משך (דקות)</label>
             <div className="flex items-center gap-2">
               <button type="button" onClick={() => setAmount((a: number) => Math.max(1, a - 5))}
-                className="w-10 h-10 rounded-lg bg-slate-800 border border-slate-700 flex items-center justify-center text-theme-muted hover:text-theme">
+                className="w-12 h-12 sm:w-10 sm:h-10 shrink-0 rounded-xl sm:rounded-lg bg-slate-800 border border-slate-700 flex items-center justify-center text-theme-muted hover:text-theme active:bg-slate-700">
                 <Icon name="chevron-right" className="w-4 h-4" />
               </button>
-              <input type="number" min="1" step="1" value={amount} onChange={e => setAmount(Number(e.target.value))}
+              <input type="number" inputMode="numeric" min="1" step="1" value={amount} onChange={e => setAmount(Number(e.target.value))}
                 className="input-base w-full text-center text-lg font-bold" />
               <button type="button" onClick={() => setAmount((a: number) => a + 5)}
-                className="w-10 h-10 rounded-lg bg-slate-800 border border-slate-700 flex items-center justify-center text-theme-muted hover:text-theme">
+                className="w-12 h-12 sm:w-10 sm:h-10 shrink-0 rounded-xl sm:rounded-lg bg-slate-800 border border-slate-700 flex items-center justify-center text-theme-muted hover:text-theme active:bg-slate-700">
                 <Icon name="chevron-left" className="w-4 h-4" />
               </button>
             </div>
@@ -262,7 +262,7 @@ function EditLogModal({ log, onClose, onSave }: { log: Row; onClose: () => void;
           <label className="text-xs text-theme-muted block mb-1">הערות</label>
           <input value={notes} onChange={e => setNotes(e.target.value)} className="input-base w-full" />
         </div>
-        <button type="submit" className="w-full bg-accent-600 hover:bg-accent-500 text-white font-medium py-2 rounded-lg text-sm transition-colors">עדכן</button>
+        <button type="submit" className="w-full bg-accent-600 hover:bg-accent-500 text-white font-medium py-3 sm:py-2 rounded-xl sm:rounded-lg text-sm transition-colors">עדכן</button>
       </form>
     </div>
   );
@@ -306,8 +306,8 @@ function DailyCharts({ logs, days = 7, timeZone }: { logs: Row[]; days?: number;
               <div className="w-full bg-slate-800 rounded-t-sm relative overflow-hidden" style={{ height: "100%" }}>
                 <div className="absolute bottom-0 w-full bg-accent-600 rounded-t-sm transition-all" style={{ height: `${(d.ml / maxMl) * 100}%` }} />
               </div>
-              <span className="text-[9px] text-theme-muted">{new Date(d.date).toLocaleDateString("he-IL", { day: "numeric", month: "numeric" })}</span>
-              <span className="text-[9px] text-accent-400 font-medium">{d.ml}</span>
+              <span className="text-[10px] text-theme-muted">{new Date(d.date).toLocaleDateString("he-IL", { day: "numeric", month: "numeric" })}</span>
+              <span className="text-[10px] text-accent-400 font-medium">{d.ml}</span>
             </div>
           ))}
         </div>
@@ -324,8 +324,8 @@ function DailyCharts({ logs, days = 7, timeZone }: { logs: Row[]; days?: number;
               <div className="w-full bg-slate-800 rounded-t-sm relative overflow-hidden" style={{ height: "100%" }}>
                 <div className="absolute bottom-0 w-full bg-pink-600 rounded-t-sm transition-all" style={{ height: `${(d.tummyTime / maxTummy) * 100}%` }} />
               </div>
-              <span className="text-[9px] text-theme-muted">{new Date(d.date).toLocaleDateString("he-IL", { day: "numeric", month: "numeric" })}</span>
-              <span className="text-[9px] text-pink-400 font-medium">{d.tummyTime > 0 ? d.tummyTime : "—"}</span>
+              <span className="text-[10px] text-theme-muted">{new Date(d.date).toLocaleDateString("he-IL", { day: "numeric", month: "numeric" })}</span>
+              <span className="text-[10px] text-pink-400 font-medium">{d.tummyTime > 0 ? d.tummyTime : "—"}</span>
             </div>
           ))}
         </div>
@@ -367,6 +367,7 @@ export default function Baby() {
   const [tab, setTab] = useState<"logs" | "charts">("logs");
   const [addLogType, setAddLogType] = useState<string | null>(null);
   const [editingLog, setEditingLog] = useState<Row | null>(null);
+  const [pendingDeleteLog, setPendingDeleteLog] = useState<Row | null>(null);
   const [selectedDate, setSelectedDate] = useState(getTodayInTimeZone(timeZone));
 
   const dateLogs = logs.filter((l) => l.event_at && utcIsoToDateInput(l.event_at, timeZone) === selectedDate);
@@ -402,7 +403,7 @@ export default function Baby() {
   return (
     <div>
       {/* Header */}
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex items-center justify-between mb-4 sm:mb-6">
         <div>
           <h2 className="text-2xl font-bold text-theme">תינוקות</h2>
           {activeChildData && <p className="text-accent-400 font-medium mt-0.5">{activeChildData.name}</p>}
@@ -420,11 +421,11 @@ export default function Baby() {
       )}
 
       {/* Child selector */}
-      {children.length >= 1 && (
+      {children.length > 1 && (
         <div className="flex gap-2 mb-4 flex-wrap">
           {children.map(c => (
             <button key={c.id} onClick={() => setActiveChild(c.id)}
-              className={"px-3 py-1.5 rounded-lg text-sm font-medium transition-colors " + (cid === c.id ? "bg-accent-600 text-white" : "bg-slate-800 text-theme-muted hover:bg-slate-700")}>
+              className={"px-4 py-2 sm:px-3 sm:py-1.5 rounded-lg text-sm font-medium transition-colors " + (cid === c.id ? "bg-accent-600 text-white" : "bg-slate-800 text-theme-muted hover:bg-slate-700")}>
               {c.name}
             </button>
           ))}
@@ -433,8 +434,8 @@ export default function Baby() {
 
       {/* Date Navigation */}
       {children.length > 0 && tab === "logs" && (
-        <div className="flex items-center gap-2 mb-5 flex-wrap">
-          <button onClick={() => navigateDate(-1)} className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-theme-muted hover:text-theme transition-colors shrink-0">
+        <div className="flex items-center gap-2 mb-5">
+          <button onClick={() => navigateDate(-1)} aria-label="יום קודם" className="p-3 sm:p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-theme-muted hover:text-theme transition-colors shrink-0">
             <Icon name="chevron-right" className="w-4 h-4" />
           </button>
           <div className="flex-1 min-w-0">
@@ -442,11 +443,11 @@ export default function Baby() {
           </div>
           {!isToday && (
             <button onClick={() => setSelectedDate(today)}
-              className="text-xs text-accent-400 hover:text-accent-300 font-medium shrink-0">
+              className="text-sm sm:text-xs text-accent-400 hover:text-accent-300 font-medium shrink-0 px-1 py-2">
               היום
             </button>
           )}
-          <button onClick={() => navigateDate(1)} className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-theme-muted hover:text-theme transition-colors shrink-0">
+          <button onClick={() => navigateDate(1)} aria-label="יום הבא" className="p-3 sm:p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-theme-muted hover:text-theme transition-colors shrink-0">
             <Icon name="chevron-left" className="w-4 h-4" />
           </button>
         </div>
@@ -455,9 +456,9 @@ export default function Baby() {
       {/* Tabs */}
       {children.length > 0 && (
         <>
-          <div className="flex rounded-lg bg-slate-900 border border-slate-800 p-0.5 w-fit mb-5">
+          <div className="grid grid-cols-2 sm:flex rounded-lg bg-slate-900 border border-slate-800 p-0.5 sm:w-fit mb-5">
             {(["logs", "charts"] as const).map(t => (
-              <button key={t} onClick={() => setTab(t)} className={"px-4 py-1.5 rounded-md text-xs font-medium transition-colors flex items-center gap-1.5 " + (tab === t ? "bg-accent-700 text-white" : "text-theme-muted hover:text-theme")}>
+              <button key={t} onClick={() => setTab(t)} className={"px-4 py-2.5 sm:py-1.5 rounded-md text-sm sm:text-xs font-medium transition-colors flex items-center justify-center gap-1.5 " + (tab === t ? "bg-accent-700 text-white" : "text-theme-muted hover:text-theme")}>
                 {t === "logs" && <><Icon name="clipboard" className="w-3.5 h-3.5" /> יומן היום</>}
                 {t === "charts" && <><Icon name="chart" className="w-3.5 h-3.5" /> גרפים</>}
               </button>
@@ -466,36 +467,36 @@ export default function Baby() {
 
           {/* ─── Logs Tab ─── */}
           {tab === "logs" && (
-            <div>
+            <div className="flex flex-col">
               {/* Summary cards */}
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
-                <div className="bg-slate-900 border border-slate-800 rounded-xl p-4 text-center">
-                  <div className="text-2xl font-bold text-theme">{feedings.length}</div>
+              <div className="grid grid-cols-4 gap-2 sm:gap-3 mb-5 sm:mb-6">
+                <div className="bg-slate-900 border border-slate-800 rounded-xl px-1 py-2.5 sm:p-4 text-center min-w-0">
+                  <div className="text-lg sm:text-2xl font-bold text-theme">{feedings.length}</div>
                   <div className="text-xs text-theme-muted mt-1">האכלות</div>
-                  {feedings.length > 0 && <div className="text-xs text-accent-400 mt-0.5">{totalMl} מ״ל</div>}
+                  {feedings.length > 0 && <div className="text-[11px] sm:text-xs text-accent-400 mt-0.5 truncate">{totalMl} מ״ל</div>}
                 </div>
-                <div className="bg-slate-900 border border-slate-800 rounded-xl p-4 text-center">
-                  <div className="text-2xl font-bold text-theme">{dateLogs.filter(l => l.log_type === "diaper_change").length}</div>
+                <div className="bg-slate-900 border border-slate-800 rounded-xl px-1 py-2.5 sm:p-4 text-center min-w-0">
+                  <div className="text-lg sm:text-2xl font-bold text-theme">{dateLogs.filter(l => l.log_type === "diaper_change").length}</div>
                   <div className="text-xs text-theme-muted mt-1">חיתולים</div>
                 </div>
-                <div className="bg-slate-900 border border-slate-800 rounded-xl p-4 text-center col-span-2 sm:col-span-1">
-                  <div className={`text-2xl font-bold ${totalTummyMinutes > 0 ? "text-pink-400" : "text-theme"}`}>
+                <div className="bg-slate-900 border border-slate-800 rounded-xl px-1 py-2.5 sm:p-4 text-center min-w-0">
+                  <div className={`text-sm leading-7 sm:leading-normal sm:text-2xl font-bold truncate ${totalTummyMinutes > 0 ? "text-pink-400" : "text-theme"}`}>
                     {totalTummyMinutes > 0 ? formatMinutes(totalTummyMinutes) : "—"}
                   </div>
                   <div className="text-xs text-theme-muted mt-1">זמן בטן</div>
                 </div>
-                <div className="bg-slate-900 border border-slate-800 rounded-xl p-4 text-center">
-                  <div className="text-2xl font-bold text-theme">{dateLogs.length}</div>
+                <div className="bg-slate-900 border border-slate-800 rounded-xl px-1 py-2.5 sm:p-4 text-center min-w-0">
+                  <div className="text-lg sm:text-2xl font-bold text-theme">{dateLogs.length}</div>
                   <div className="text-xs text-theme-muted mt-1">סה״כ</div>
                 </div>
               </div>
 
-              {/* Quick add buttons */}
-              <div className="flex gap-2 flex-wrap mb-5">
+              {/* Quick add buttons – first thing on phones */}
+              <div className="order-first sm:order-none grid grid-cols-4 gap-2 sm:flex sm:flex-wrap mb-4 sm:mb-5">
                 {logTypes.map(lt => (
                   <button key={lt.id} onClick={() => setAddLogType(lt.id)}
-                    className="flex items-center gap-1.5 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-xl px-3 py-2 text-sm font-medium transition-colors text-theme">
-                    <Icon name={lt.icon} className={`w-4 h-4 ${lt.color}`} /> {lt.label}
+                    className="flex flex-col sm:flex-row items-center justify-center gap-1 sm:gap-1.5 bg-slate-800 hover:bg-slate-700 active:bg-slate-700 border border-slate-700 rounded-xl px-1 py-3 sm:px-3 sm:py-2 text-xs sm:text-sm font-medium transition-colors text-theme min-w-0">
+                    <Icon name={lt.icon} className={`w-6 h-6 sm:w-4 sm:h-4 ${lt.color}`} /> <span className="truncate max-w-full">{lt.label}</span>
                   </button>
                 ))}
               </div>
@@ -503,9 +504,9 @@ export default function Baby() {
               {/* Today's log list */}
               <div className="space-y-2">
                 {dateLogs.map(log => (
-                  <div key={log.id} className="flex items-center gap-3 bg-slate-900 border border-slate-800 rounded-xl px-4 py-3 group">
+                  <div key={log.id} className="flex items-center gap-3 bg-slate-900 border border-slate-800 rounded-xl ps-4 pe-1 sm:pe-4 py-1.5 sm:py-3 group">
                     <LogIcon type={log.log_type} />
-                    <div className="flex-1 min-w-0">
+                    <button type="button" onClick={() => setEditingLog(log)} className="flex-1 min-w-0 text-right py-1.5 sm:py-0">
                       <div className="text-sm font-medium text-theme">{LOG_LABELS[log.log_type] ?? log.log_type}</div>
                       {log.amount != null && (
                         <div className="text-xs text-theme-muted">
@@ -513,14 +514,14 @@ export default function Baby() {
                         </div>
                       )}
                       {log.notes && <div className="text-xs text-theme-muted opacity-70 truncate">{log.notes}</div>}
-                    </div>
+                    </button>
                     <span className="text-xs text-theme-muted shrink-0">{formatInTimeZone(log.event_at, timeZone, { hour: "2-digit", minute: "2-digit" })}</span>
-                    <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                      <button onClick={() => setEditingLog(log)} className="text-theme-muted hover:text-accent-400">
-                        <Icon name="edit" className="w-3.5 h-3.5" />
+                    <div className="flex sm:gap-1 sm:opacity-0 sm:group-hover:opacity-100 sm:focus-within:opacity-100 transition-opacity">
+                      <button onClick={() => setEditingLog(log)} className="hidden sm:block p-1 text-theme-muted hover:text-accent-400" aria-label="עריכה">
+                        <Icon name="edit" className="w-4 h-4" />
                       </button>
-                      <button onClick={() => deleteLog.mutate(log.id)} className="text-theme-muted hover:text-red-400">
-                        <Icon name="trash" className="w-3.5 h-3.5" />
+                      <button onClick={() => setPendingDeleteLog(log)} className="p-2.5 sm:p-1 text-theme-muted hover:text-red-400" aria-label="מחיקה">
+                        <Icon name="trash" className="w-4 h-4" />
                       </button>
                     </div>
                   </div>
@@ -549,6 +550,21 @@ export default function Baby() {
       )}
       {editingLog && (
         <EditLogModal log={editingLog} onClose={() => setEditingLog(null)} onSave={log => updateLog.mutate(log)} />
+      )}
+      {pendingDeleteLog && (
+        <div className="modal-overlay" onClick={(e) => { if (e.target === e.currentTarget) setPendingDeleteLog(null); }}>
+          <div className="modal-panel sm:max-w-sm border-slate-700 bg-slate-900">
+            <div className="flex items-center gap-2 mb-1">
+              <Icon name="warning" className="w-5 h-5 text-red-400" />
+              <h3 className="text-base font-semibold text-theme">למחוק רשומת {LOG_LABELS[pendingDeleteLog.log_type] ?? pendingDeleteLog.log_type}?</h3>
+            </div>
+            <p className="text-sm text-theme-muted mt-1">{formatInTimeZone(pendingDeleteLog.event_at, timeZone, { hour: "2-digit", minute: "2-digit" })} · הפעולה אינה ניתנת לביטול.</p>
+            <div className="grid grid-cols-2 gap-2 mt-5 sm:flex sm:justify-end sm:mt-4">
+              <button onClick={() => setPendingDeleteLog(null)} className="px-4 py-2.5 sm:py-2 rounded-xl sm:rounded-lg text-sm font-medium bg-slate-800 text-theme-muted hover:bg-slate-700">ביטול</button>
+              <button onClick={() => { deleteLog.mutate(pendingDeleteLog.id); setPendingDeleteLog(null); }} className="px-4 py-2.5 sm:py-2 rounded-xl sm:rounded-lg text-sm font-medium bg-red-600 text-white hover:bg-red-500">מחיקה</button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

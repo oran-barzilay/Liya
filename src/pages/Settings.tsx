@@ -191,39 +191,49 @@ export default function Settings() {
       </div>
 
       {/* Theme presets section */}
-      <section className="bg-slate-900 border border-slate-800 rounded-2xl p-6 mb-5">
+      <section className="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-6 mb-4 sm:mb-5">
         <h3 className="text-base font-semibold mb-1 text-theme flex items-center gap-2">
           <Icon name="palette" className="w-4 h-4 text-accent-400" /> ערכות צבעים מוכנות
         </h3>
         <p className="text-theme-muted text-xs mb-4">בחר ערכת צבעים מוכנה עם שליטה מלאה בטקסט ורקע</p>
 
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-2">
-          {THEME_PRESETS.map((preset, idx) => (
-            <button
-              key={idx}
-              onClick={() => applyPalette(preset)}
-              className="group relative border border-slate-700 rounded-xl p-3 hover:border-accent-500 transition-all text-start"
-            >
-              <div className="flex gap-1 mb-2">
-                <div className="w-4 h-4 rounded-full border border-white/20" style={{ backgroundColor: preset.accentCustom }} />
-                <div className="w-4 h-4 rounded-full border border-white/20" style={{ backgroundColor: preset.appBg }} />
-                <div className="w-4 h-4 rounded-full border border-white/20" style={{ backgroundColor: preset.menuBg }} />
-              </div>
-              <div className="text-xs font-medium" style={{ color: preset.textPrimary }}>{preset.name}</div>
-              {/* Preview stripe */}
-              <div className="mt-2 h-6 rounded-md flex overflow-hidden border border-white/10">
-                <div className="w-1/3" style={{ backgroundColor: preset.menuBg }} />
-                <div className="flex-1 flex items-center justify-center" style={{ backgroundColor: preset.appBg }}>
-                  <span className="text-[8px] font-medium" style={{ color: preset.textPrimary }}>Aa</span>
+          {THEME_PRESETS.map((preset, idx) => {
+            const isActive = preset.appBg === appBg && preset.menuBg === menuBg
+              && (preset.accentColor === "custom" ? accentColor === "custom" && preset.accentCustom === accentCustom : preset.accentColor === accentColor);
+            return (
+              <button
+                key={idx}
+                onClick={() => applyPalette(preset)}
+                aria-pressed={isActive}
+                className={"relative rounded-xl overflow-hidden border-2 transition-all text-start " +
+                  (isActive ? "border-accent-500" : "border-slate-700 hover:border-accent-500")}
+              >
+                {/* Mini preview rendered in the preset's own colors, so its label is always readable */}
+                <div className="flex h-full" style={{ backgroundColor: preset.appBg }}>
+                  <div className="w-3 shrink-0" style={{ backgroundColor: preset.menuBg }} />
+                  <div className="flex-1 min-w-0 p-3">
+                    <div className="text-xs font-semibold truncate" style={{ color: preset.textPrimary }}>{preset.name}</div>
+                    <div className="text-[11px] truncate mt-0.5" style={{ color: preset.textMuted }}>טקסט משני</div>
+                    <div className="mt-2 inline-flex items-center rounded-md px-2 py-0.5 text-[11px] font-medium"
+                      style={{ backgroundColor: preset.accentCustom, color: contrastRatio("#ffffff", preset.accentCustom) >= 3 ? "#ffffff" : "#0f172a" }}>
+                      כפתור
+                    </div>
+                  </div>
                 </div>
-              </div>
-            </button>
-          ))}
+                {isActive && (
+                  <span className="absolute top-1.5 left-1.5 w-5 h-5 rounded-full bg-accent-600 text-white flex items-center justify-center">
+                    <Icon name="check" className="w-3 h-3" />
+                  </span>
+                )}
+              </button>
+            );
+          })}
         </div>
       </section>
 
       {/* Manual color tuning */}
-      <section className="bg-slate-900 border border-slate-800 rounded-2xl p-6 mb-5">
+      <section className="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-6 mb-4 sm:mb-5">
         <h3 className="text-base font-semibold mb-1 text-theme">כיוונון צבעים ידני</h3>
         <p className="text-theme-muted text-xs mb-5">צבע ראשי, רקעים וצבעי טקסט</p>
 
@@ -316,12 +326,12 @@ export default function Settings() {
         </div>
 
         {/* Save palette */}
-        <div className="mt-4 flex items-center gap-2">
+        <div className="mt-4 flex flex-wrap items-center gap-2">
           <input
             value={paletteName}
             onChange={(e) => setPaletteName(e.target.value)}
             placeholder="שם ערכת הצבעים..."
-            className="input-base text-xs py-2 w-40"
+            className="input-base text-xs py-2 flex-1 min-w-0 sm:flex-none sm:w-40"
           />
           <button
             onClick={() => { saveCurrentPalette(paletteName); setPaletteName(""); }}
@@ -364,13 +374,13 @@ export default function Settings() {
         )}
       </section>
 
-      <section className="bg-slate-900 border border-slate-800 rounded-2xl p-6 mb-5">
+      <section className="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-6 mb-4 sm:mb-5">
         <h3 className="text-base font-semibold mb-4 text-theme flex items-center gap-2">
           <Icon name="home" className="w-4 h-4 text-accent-400" /> כללי
         </h3>
         <div className="space-y-4">
           {/* App name */}
-          <div className="flex items-center justify-between py-2 border-b border-slate-800">
+          <div className="flex flex-wrap items-center justify-between gap-2 py-2 border-b border-slate-800">
             <span className="text-sm text-theme-muted">שם האפליקציה (תצוגה)</span>
             {editingName ? (
               <div className="flex items-center gap-2">
@@ -381,7 +391,7 @@ export default function Settings() {
             ) : (
               <div className="flex items-center gap-2">
                 <span className="text-sm text-theme font-medium">{appName}</span>
-                <button onClick={() => setEditingName(true)} className="text-theme-muted hover:text-accent-400"><Icon name="edit" className="w-3.5 h-3.5" /></button>
+                <button onClick={() => setEditingName(true)} className="p-2 -m-2 text-theme-muted hover:text-accent-400" aria-label="עריכה"><Icon name="edit" className="w-4 h-4" /></button>
               </div>
             )}
           </div>
@@ -469,7 +479,7 @@ export default function Settings() {
       </section>
 
       {/* Baby management */}
-      <section className="bg-slate-900 border border-slate-800 rounded-2xl p-6 mb-5">
+      <section className="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-6 mb-4 sm:mb-5">
         <h3 className="text-base font-semibold mb-4 text-theme flex items-center gap-2">
           <Icon name="babies" className="w-4 h-4 text-accent-400" /> ניהול תינוקות
         </h3>
@@ -481,16 +491,16 @@ export default function Settings() {
                   <span className="text-sm text-theme font-medium">{child.name}</span>
                   {child.birth_date && <span className="text-xs text-theme-muted mr-2"> · {new Date(child.birth_date).toLocaleDateString("he-IL")}</span>}
                 </div>
-                <button onClick={() => setPendingDeleteChild(child)} className="text-theme-muted hover:text-red-400 transition-colors">
-                  <Icon name="trash" className="w-3.5 h-3.5" />
+                <button onClick={() => setPendingDeleteChild(child)} className="p-2 -m-1.5 text-theme-muted hover:text-red-400 transition-colors" aria-label="מחיקה">
+                  <Icon name="trash" className="w-4 h-4" />
                 </button>
               </div>
             ))}
           </div>
         )}
         {children.length === 0 && <p className="text-sm text-theme-muted mb-4">לא הוספו תינוקות עדיין.</p>}
-        <div className="flex items-end gap-2">
-          <div className="flex-1">
+        <div className="grid grid-cols-2 sm:flex items-end gap-2">
+          <div className="col-span-2 sm:flex-1">
             <label className="text-xs text-theme-muted block mb-1">שם</label>
             <input value={newChildName} onChange={e => setNewChildName(e.target.value)} className="input-base w-full" placeholder="לילה" />
           </div>
@@ -501,14 +511,14 @@ export default function Settings() {
           <button
             disabled={!newChildName || !newChildBirth}
             onClick={() => { addChild.mutate({ name: newChildName, birth_date: newChildBirth }); setNewChildName(""); setNewChildBirth(""); }}
-            className="bg-accent-600 hover:bg-accent-500 disabled:opacity-40 text-white text-sm font-medium px-3 py-2 rounded-lg transition-colors flex items-center gap-1.5 shrink-0"
+            className="bg-accent-600 hover:bg-accent-500 disabled:opacity-40 text-white text-sm font-medium px-3 py-2.5 sm:py-2 rounded-lg transition-colors flex items-center justify-center gap-1.5 shrink-0"
           >
             <Icon name="plus" className="w-3.5 h-3.5" /> הוסף
           </button>
         </div>
       </section>
 
-      <section className="bg-slate-900 border border-slate-800 rounded-2xl p-6 mb-5">
+      <section className="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-6 mb-4 sm:mb-5">
         <h3 className="text-base font-semibold mb-4 text-theme">פרטי משתמש</h3>
         <div className="space-y-3 text-sm">
           <div className="flex items-center justify-between py-2 border-b border-slate-800">
@@ -592,17 +602,17 @@ export default function Settings() {
 
       {/* Delete child confirmation */}
       {pendingDeleteChild && (
-        <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4">
-          <div className="w-full max-w-md rounded-2xl border border-slate-700 bg-slate-900 p-5">
+        <div className="modal-overlay" onClick={(e) => { if (e.target === e.currentTarget) setPendingDeleteChild(null); }}>
+          <div className="modal-panel sm:max-w-md border-slate-700 bg-slate-900">
             <div className="flex items-center gap-2 mb-1">
               <Icon name="warning" className="w-5 h-5 text-red-400" />
               <h3 className="text-base font-semibold text-theme">למחוק את {pendingDeleteChild.name}?</h3>
             </div>
             <p className="text-sm text-theme-muted mt-1">כל הנתונים של תינוק/ת זו יימחקו לצמיתות.</p>
-            <div className="flex justify-end gap-2 mt-4">
-              <button onClick={() => setPendingDeleteChild(null)} className="px-3 py-2 rounded-lg text-sm bg-slate-800 text-theme-muted hover:bg-slate-700">ביטול</button>
+            <div className="grid grid-cols-2 gap-2 mt-5 sm:flex sm:justify-end sm:mt-4">
+              <button onClick={() => setPendingDeleteChild(null)} className="px-4 py-2.5 sm:py-2 rounded-xl sm:rounded-lg text-sm font-medium bg-slate-800 text-theme-muted hover:bg-slate-700">ביטול</button>
               <button onClick={() => { deleteChild.mutate(pendingDeleteChild.id); setPendingDeleteChild(null); }}
-                className="px-3 py-2 rounded-lg text-sm bg-red-600 text-white hover:bg-red-500">מחיקה</button>
+                className="px-4 py-2.5 sm:py-2 rounded-xl sm:rounded-lg text-sm font-medium bg-red-600 text-white hover:bg-red-500">מחיקה</button>
             </div>
           </div>
         </div>
@@ -611,7 +621,7 @@ export default function Settings() {
       {/* Change Password */}
       <section
         id="change-password-section"
-        className={"bg-slate-900 border rounded-2xl p-6 mb-5 transition-all " + (changePasswordMode ? "border-accent-600 shadow-lg shadow-accent-900/20" : "border-slate-800")}
+        className={"bg-slate-900 border rounded-2xl p-4 sm:p-6 mb-4 sm:mb-5 transition-all " + (changePasswordMode ? "border-accent-600 shadow-lg shadow-accent-900/20" : "border-slate-800")}
       >
         <h3 className="text-base font-semibold mb-1 text-theme flex items-center gap-2">
           <Icon name="lock" className="w-4 h-4 text-accent-400" /> שינוי סיסמה

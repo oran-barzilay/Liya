@@ -6,7 +6,8 @@ type IconName =
   | "filter" | "drag" | "star" | "palette" | "send" | "diaper" | "pill" | "chart"
   | "hand-wave" | "upload" | "bar-chart" | "repeat" | "users" | "trending-up"
   | "pie-chart" | "refresh" | "tag" | "chevron-down" | "chevron-up" | "credit-card"
-  | "download" | "layers" | "minus" | "external-link" | "eye" | "grid" | "lock" | "chat" | "more";
+  | "download" | "layers" | "minus" | "external-link" | "eye" | "grid" | "lock" | "chat" | "more"
+  | "plane" | "bed" | "car" | "map-pin";
 
 export default function Icon({
   name,
@@ -413,6 +414,14 @@ export default function Icon({
       return (<svg viewBox="0 0 24 24" className={className} aria-hidden="true" {...common}><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>);
     case "chat":
       return (<svg viewBox="0 0 24 24" className={className} aria-hidden="true" {...common}><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>);
+    case "plane":
+      return (<svg viewBox="0 0 24 24" className={className} aria-hidden="true" {...common}><path d="M17.8 19.2 16 11l3.5-3.5C21 6 21.5 4 21 3c-1-.5-3 0-4.5 1.5L13 8 4.8 6.2c-.5-.1-.9.1-1.1.5l-.3.5c-.2.5-.1 1 .3 1.3L9 12l-2 3H4l-1 1 3 2 2 3 1-1v-3l3-2 3.5 5.3c.3.4.8.5 1.3.3l.5-.2c.4-.3.6-.7.5-1.2z"/></svg>);
+    case "bed":
+      return (<svg viewBox="0 0 24 24" className={className} aria-hidden="true" {...common}><path d="M2 4v16M2 8h18a2 2 0 0 1 2 2v10M2 17h20M6 8v9"/></svg>);
+    case "car":
+      return (<svg viewBox="0 0 24 24" className={className} aria-hidden="true" {...common}><path d="M19 17h2c.6 0 1-.4 1-1v-3c0-.9-.7-1.7-1.5-1.9C18.7 10.6 16 10 16 10s-1.3-1.4-2.2-2.3c-.5-.4-1.1-.7-1.8-.7H5c-.6 0-1.1.4-1.4.9l-1.4 2.9A3.7 3.7 0 0 0 2 12v4c0 .6.4 1 1 1h2"/><circle cx="7" cy="17" r="2"/><path d="M9 17h6"/><circle cx="17" cy="17" r="2"/></svg>);
+    case "map-pin":
+      return (<svg viewBox="0 0 24 24" className={className} aria-hidden="true" {...common}><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg>);
     case "more":
       return (<svg viewBox="0 0 24 24" className={className} aria-hidden="true" {...common}><circle cx="5" cy="12" r="1.2"/><circle cx="12" cy="12" r="1.2"/><circle cx="19" cy="12" r="1.2"/></svg>);
     default:

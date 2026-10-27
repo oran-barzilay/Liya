@@ -15,6 +15,8 @@ import Inventory from "./pages/Inventory";
 import Baby from "./pages/Baby";
 import Finance from "./pages/Finance";
 import Settings from "./pages/Settings";
+import Trips from "./pages/Trips";
+import TripDetail from "./pages/TripDetail";
 
 function AppRoutes() {
   const { user, loading: authLoading, isRecovery, clearRecovery } = useAuth();
@@ -62,6 +64,8 @@ function AppRoutes() {
         <Route path="/inventory" element={<Inventory />} />
         <Route path="/baby" element={<Baby />} />
         <Route path="/finance" element={<Finance />} />
+        <Route path="/trips" element={<Trips />} />
+        <Route path="/trips/:tripId" element={<TripDetail />} />
         <Route path="/settings" element={<Settings />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>

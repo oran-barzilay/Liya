@@ -5,6 +5,8 @@ import { useTasks } from "../hooks/useTasks";
 import Icon from "../components/Icon";
 import AppCalendar from "../components/AppCalendar";
 import Fab from "../components/Fab";
+import ReminderPicker from "../components/ReminderPicker";
+import { reminderColumns, reminderFromRow, type ReminderValue } from "../lib/reminders";
 import { usePreferencesStore } from "../state/stores/preferencesStore";
 import {
   formatInTimeZone,
@@ -52,13 +54,15 @@ function AddEventModal({ onClose, onSave, timeZone, defaultDate }: {
   const [provider, setProvider] = useState("");
   const [loc, setLoc] = useState("");
   const [notes, setNotes] = useState("");
+  const [reminder, setReminder] = useState<ReminderValue>({ preset: "none", custom: "" });
+  const itemIso = startsAt ? zonedDateTimeToUtcIso(startsAt, timeZone) : null;
 
   return (
     <div className="modal-overlay" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
       <form
         onSubmit={(e) => {
           e.preventDefault();
-          onSave({ title, starts_at: startsAt ? zonedDateTimeToUtcIso(startsAt, timeZone) : null, provider_name: provider || null, location: loc || null, notes: notes || null, status: "scheduled" });
+          onSave({ title, starts_at: itemIso, provider_name: provider || null, location: loc || null, notes: notes || null, status: "scheduled", ...reminderColumns(reminder, itemIso, timeZone) });
           onClose();
         }}
         className="modal-panel bg-slate-900 border-slate-700 sm:max-w-sm space-y-4"
@@ -86,6 +90,7 @@ function AddEventModal({ onClose, onSave, timeZone, defaultDate }: {
           <label className="text-xs text-theme-muted block mb-1">הערות</label>
           <input value={notes} onChange={(e) => setNotes(e.target.value)} className="input-base w-full" placeholder="פרטים נוספים..." />
         </div>
+        <ReminderPicker value={reminder} onChange={setReminder} itemIso={itemIso} timeZone={timeZone} />
         <button type="submit" disabled={!title || !startsAt} className="w-full bg-accent-600 hover:bg-accent-500 disabled:opacity-50 text-white font-medium py-3 sm:py-2.5 rounded-xl sm:rounded-lg text-sm transition-colors">
           שמור אירוע
         </button>
@@ -103,13 +108,15 @@ function EditEventModal({ event, onClose, onSave, timeZone }: {
   const [provider, setProvider] = useState(event.provider_name ?? "");
   const [loc, setLoc] = useState(event.location ?? "");
   const [notes, setNotes] = useState(event.notes ?? "");
+  const [reminder, setReminder] = useState<ReminderValue>(() => reminderFromRow(event, timeZone));
+  const itemIso = startsAt ? zonedDateTimeToUtcIso(startsAt, timeZone) : null;
 
   return (
     <div className="modal-overlay" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
       <form
         onSubmit={(e) => {
           e.preventDefault();
-          onSave({ id: event.id, title, starts_at: startsAt ? zonedDateTimeToUtcIso(startsAt, timeZone) : null, provider_name: provider || null, location: loc || null, notes: notes || null });
+          onSave({ id: event.id, title, starts_at: itemIso, provider_name: provider || null, location: loc || null, notes: notes || null, ...reminderColumns(reminder, itemIso, timeZone, event.whatsapp_remind_at) });
           onClose();
         }}
         className="modal-panel bg-slate-900 border-slate-700 sm:max-w-sm space-y-4"
@@ -137,6 +144,7 @@ function EditEventModal({ event, onClose, onSave, timeZone }: {
           <label className="text-xs text-theme-muted block mb-1">הערות</label>
           <input value={notes} onChange={(e) => setNotes(e.target.value)} className="input-base w-full" />
         </div>
+        <ReminderPicker value={reminder} onChange={setReminder} itemIso={itemIso} timeZone={timeZone} />
         <button type="submit" className="w-full bg-accent-600 hover:bg-accent-500 text-white font-medium py-3 sm:py-2.5 rounded-xl sm:rounded-lg text-sm transition-colors">שמור</button>
       </form>
     </div>

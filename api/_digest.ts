@@ -22,8 +22,15 @@ export interface DigestStockItem {
   critical_threshold: number | string;
   unit: string;
 }
+export type DigestSection = "events" | "today" | "overdue" | "shopping" | "tomorrow";
+export type WeeklySection = "events" | "tasks" | "overdue" | "shopping";
+
 export interface DigestInput {
   now: Date;
+  /** Sections to include (all when omitted) */
+  sections?: Partial<Record<DigestSection, boolean>>;
+  /** Replaces the time-of-day greeting in the header */
+  greeting?: string | null;
   timeZone: string;
   tasks: DigestTask[];
   events: DigestEvent[];
@@ -50,54 +57,114 @@ const OPEN = (t: DigestTask) => t.status !== "done" && t.status !== "cancelled";
 // Shopping tasks are covered by the shopping list section
 const EVERYDAY = (t: DigestTask) => t.module !== "inventory";
 const when = (t: DigestTask) => t.scheduled_start_at ?? t.due_at;
+const weekdayName = (iso: string) =>
+  new Intl.DateTimeFormat("he-IL", { timeZone: "UTC", weekday: "long" }).format(new Date(iso + "T12:00:00Z"));
+
+/** Shared building blocks for the daily and weekly summaries */
+function prepare(input: Omit<DigestInput, "sections" | "greeting">) {
+  const { timeZone, members } = input;
+  const today = localDate(input.now, timeZone);
+  const tasks = input.tasks.filter((t) => OPEN(t) && EVERYDAY(t) && when(t));
+  const events = input.events.filter((e) => e.status !== "cancelled");
+  return {
+    today,
+    tasksOn: (day: string) => tasks
+      .filter((t) => localDate(when(t)!, timeZone) === day)
+      .sort((a, b) => when(a)!.localeCompare(when(b)!)),
+    eventsOn: (day: string) => events
+      .filter((e) => localDate(e.starts_at, timeZone) === day)
+      .sort((a, b) => a.starts_at.localeCompare(b.starts_at)),
+    overdue: tasks
+      .filter((t) => localDate(when(t)!, timeZone) < today)
+      .sort((a, b) => when(a)!.localeCompare(when(b)!)),
+    shopping: input.inventory
+      .filter((i) => Number(i.quantity) < Number(i.critical_threshold))
+      .map((i) => i.name),
+    taskLine: (t: DigestTask) => {
+      // Date-only tasks are stored at local midnight: no time prefix
+      const time = t.scheduled_start_at && hhmm(t.scheduled_start_at, timeZone) !== "00:00" ? `${hhmm(t.scheduled_start_at, timeZone)} ` : "";
+      const who = t.assigned_to && members[t.assigned_to] ? ` — ${members[t.assigned_to]}` : "";
+      return `• ${time}${t.title}${who}`;
+    },
+    eventLine: (e: DigestEvent) => {
+      const extra = [e.provider_name, e.location].filter(Boolean).join(", ");
+      return `• ${hhmm(e.starts_at, timeZone)} ${e.title}${extra ? ` (${extra})` : ""}`;
+    },
+    overdueSection: (list: DigestTask[], fmt: (t: DigestTask) => string, max = 8) =>
+      ["⚠️ *באיחור*", ...list.slice(0, max).map((t) => `${fmt(t)} (מ-${ddmm(localDate(when(t)!, timeZone))})`),
+        ...(list.length > max ? [`ועוד ${list.length - max}...`] : [])].join("\n"),
+  };
+}
 
 export function buildDigest(input: DigestInput): string {
-  const { now, timeZone, members } = input;
-  const today = localDate(now, timeZone);
-  const tomorrow = addDay(today);
-  const weekday = (iso: string) =>
-    new Intl.DateTimeFormat("he-IL", { timeZone: "UTC", weekday: "long" }).format(new Date(iso + "T12:00:00Z"));
-
-  const tasks = input.tasks.filter((t) => OPEN(t) && EVERYDAY(t) && when(t));
-  const onDay = (day: string) => tasks
-    .filter((t) => localDate(when(t)!, timeZone) === day)
-    .sort((a, b) => when(a)!.localeCompare(when(b)!));
-  const overdue = tasks
-    .filter((t) => localDate(when(t)!, timeZone) < today)
-    .sort((a, b) => when(a)!.localeCompare(when(b)!));
-  const events = input.events.filter((e) => e.status !== "cancelled");
-  const eventsOn = (day: string) => events
-    .filter((e) => localDate(e.starts_at, timeZone) === day)
-    .sort((a, b) => a.starts_at.localeCompare(b.starts_at));
-  const shopping = input.inventory
-    .filter((i) => Number(i.quantity) < Number(i.critical_threshold))
-    .map((i) => i.name);
-
-  const taskLine = (t: DigestTask) => {
-    const time = t.scheduled_start_at ? `${hhmm(t.scheduled_start_at, timeZone)} ` : "";
-    const who = t.assigned_to && members[t.assigned_to] ? ` — ${members[t.assigned_to]}` : "";
-    return `• ${time}${t.title}${who}`;
-  };
-  const eventLine = (e: DigestEvent) => {
-    const extra = [e.provider_name, e.location].filter(Boolean).join(", ");
-    return `• ${hhmm(e.starts_at, timeZone)} ${e.title}${extra ? ` (${extra})` : ""}`;
-  };
+  const { now, timeZone } = input;
+  const on = (s: DigestSection) => input.sections?.[s] !== false;
+  const p = prepare(input);
+  const tomorrow = addDay(p.today);
 
   const sections: string[] = [];
-  const todayEvents = eventsOn(today);
-  const todayTasks = onDay(today);
-  if (todayEvents.length) sections.push(["📅 *אירועים היום*", ...todayEvents.map(eventLine)].join("\n"));
-  if (todayTasks.length) sections.push(["✅ *משימות להיום*", ...todayTasks.map(taskLine)].join("\n"));
-  if (overdue.length) {
-    sections.push(["⚠️ *באיחור*", ...overdue.slice(0, 8).map((t) => `${taskLine(t)} (מ-${ddmm(localDate(when(t)!, timeZone))})`),
-      ...(overdue.length > 8 ? [`ועוד ${overdue.length - 8}...`] : [])].join("\n"));
-  }
-  if (shopping.length) sections.push(`🛒 *לקנות*\n${shopping.join(", ")}`);
+  const todayEvents = p.eventsOn(p.today);
+  const todayTasks = p.tasksOn(p.today);
+  if (on("events") && todayEvents.length) sections.push(["📅 *אירועים היום*", ...todayEvents.map(p.eventLine)].join("\n"));
+  if (on("today") && todayTasks.length) sections.push(["✅ *משימות להיום*", ...todayTasks.map(p.taskLine)].join("\n"));
+  if (on("overdue") && p.overdue.length) sections.push(p.overdueSection(p.overdue, p.taskLine));
+  if (on("shopping") && p.shopping.length) sections.push(`🛒 *לקנות*\n${p.shopping.join(", ")}`);
 
-  const tomorrowLines = [...eventsOn(tomorrow).map(eventLine), ...onDay(tomorrow).map(taskLine)];
-  if (tomorrowLines.length) sections.push([`🔜 *מחר (${weekday(tomorrow)})*`, ...tomorrowLines].join("\n"));
+  const tomorrowLines = [...p.eventsOn(tomorrow).map(p.eventLine), ...p.tasksOn(tomorrow).map(p.taskLine)];
+  if (on("tomorrow") && tomorrowLines.length) sections.push([`🔜 *מחר (${weekdayName(tomorrow)})*`, ...tomorrowLines].join("\n"));
 
-  const header = `☀️ *בוקר טוב! ${weekday(today)} ${ddmm(today)}*`;
-  if (!sections.length) return `${header}\n\nאין משימות או אירועים להיום, והמלאי מלא. יום נעים! 🎉`;
+  const hour = localHour(now, timeZone);
+  const [icon, hello] = hour < 12 ? ["☀️", "בוקר טוב!"] : hour < 17 ? ["🌤️", "צהריים טובים!"] : ["🌙", "ערב טוב!"];
+  const header = `${icon} *${input.greeting?.trim() || hello} ${weekdayName(p.today)} ${ddmm(p.today)}*`;
+  if (!sections.length) return `${header}\n\nאין משהו מיוחד על הלוח. יום נעים! 🎉`;
   return [header, ...sections].join("\n\n");
+}
+
+export interface WeeklyInput extends Omit<DigestInput, "sections"> {
+  sections?: Partial<Record<WeeklySection, boolean>>;
+}
+
+/**
+ * The coming week, day by day. Sent in the afternoon/evening it covers the 7 days
+ * starting tomorrow (e.g. Saturday night → Sunday–Saturday); sent earlier, it starts today.
+ */
+export function buildWeekly(input: WeeklyInput): string {
+  const on = (s: WeeklySection) => input.sections?.[s] !== false;
+  const p = prepare(input);
+  const first = localHour(input.now, input.timeZone) >= 15 ? addDay(p.today) : p.today;
+  const days = [first];
+  while (days.length < 7) days.push(addDay(days[days.length - 1]));
+
+  const dayBlocks = days.flatMap((day) => {
+    const lines = [
+      ...(on("events") ? p.eventsOn(day).map(p.eventLine) : []),
+      ...(on("tasks") ? p.tasksOn(day).map(p.taskLine) : []),
+    ];
+    return lines.length ? [[`*${weekdayName(day)} ${ddmm(day)}*`, ...lines].join("\n")] : [];
+  });
+
+  const sections: string[] = [];
+  if (on("events") || on("tasks")) sections.push(dayBlocks.length ? dayBlocks.join("\n\n") : "השבוע פנוי — אין אירועים או משימות מתוכננים 🌴");
+  if (on("overdue") && p.overdue.length) sections.push(p.overdueSection(p.overdue, p.taskLine, 5));
+  if (on("shopping") && p.shopping.length) sections.push(`🛒 *לקנות*\n${p.shopping.join(", ")}`);
+
+  const header = `🗓️ *${input.greeting?.trim() || "השבוע הקרוב"} · ${ddmm(days[0])}–${ddmm(days[6])}*`;
+  return [header, ...sections].join("\n\n");
+}
+
+/** A dedicated reminder for one task or event */
+export function buildReminder(item: { title: string; at: string | null; kind: "task" | "event"; location?: string | null; who?: string | null }, timeZone: string): string {
+  // Date-only tasks are stored at local midnight: show just the day
+  const time = item.at ? hhmm(item.at, timeZone) : null;
+  const day = item.at ? localDate(item.at, timeZone) : null;
+  const when = day
+    ? `${day === localDate(new Date(), timeZone) ? "היום" : ddmm(day)}${time && time !== "00:00" ? ` ב-${time}` : ""}`
+    : "";
+  const lines = [
+    `⏰ *תזכורת: ${item.title}*`,
+    when ? `${item.kind === "event" ? "📅" : "🗓️"} ${when}` : null,
+    item.location ? `📍 ${item.location}` : null,
+    item.who ? `👤 ${item.who}` : null,
+  ];
+  return lines.filter(Boolean).join("\n");
 }

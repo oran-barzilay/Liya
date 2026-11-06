@@ -1,9 +1,13 @@
 import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { useQueryClient } from "@tanstack/react-query";
 import { useTasks } from "../hooks/useTasks";
+import { useInventory } from "../hooks/useInventory";
 import Icon from "../components/Icon";
 import AppCalendar from "../components/AppCalendar";
 import Fab from "../components/Fab";
+import ReminderPicker from "../components/ReminderPicker";
+import { reminderColumns, reminderFromRow, type ReminderValue } from "../lib/reminders";
 import { usePreferencesStore } from "../state/stores/preferencesStore";
 import { getTodayInTimeZone, utcIsoToDateInput, zonedDateTimeToUtcIso } from "../lib/datetime";
 
@@ -105,6 +109,8 @@ function AddTaskModal({ onClose, onAdd, members }: {
   const [isRecurring, setIsRecurring] = useState(false);
   const [recurDays, setRecurDays] = useState<number[]>([]);
   const [recurTime, setRecurTime] = useState("09:00");
+  const [reminder, setReminder] = useState<ReminderValue>({ preset: "none", custom: "" });
+  const itemIso = toUtcIso(taskType === "priority" ? dueAt : scheduledStart, timeZone);
 
   return (
     <div className="modal-overlay" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
@@ -120,6 +126,7 @@ function AddTaskModal({ onClose, onAdd, members }: {
             scheduled_start_at: isRecurring ? (taskType === "time_sensitive" ? nextOccurrence : null) : toUtcIso(scheduledStart, timeZone),
             description: desc || null, assigned_to: assignedTo || null,
             is_recurring: isRecurring, recurrence_rule: recurrenceRule,
+            ...(isRecurring ? {} : reminderColumns(reminder, itemIso, timeZone)),
           });
           onClose();
         }}
@@ -192,6 +199,7 @@ function AddTaskModal({ onClose, onAdd, members }: {
         {!isRecurring && taskType === "time_sensitive" && (
           <AppCalendar label="מועד מתוזמן" value={scheduledStart} onChange={setScheduledStart} mode="date" placeholder="בחר תאריך" />
         )}
+        {!isRecurring && <ReminderPicker value={reminder} onChange={setReminder} itemIso={itemIso} timeZone={timeZone} />}
 
         {/* Recurrence config */}
         {isRecurring && (
@@ -233,6 +241,8 @@ function EditTaskModal({ task, onClose, onSave, members }: {
   const [recurTime, setRecurTime] = useState(() => {
     try { return JSON.parse(task.recurrence_rule ?? "{}").time ?? "09:00"; } catch { return "09:00"; }
   });
+  const [reminder, setReminder] = useState<ReminderValue>(() => reminderFromRow(task, timeZone));
+  const itemIso = toUtcIso(task.task_type === "priority" ? dueAt : scheduledStart, timeZone);
 
   return (
     <div className="modal-overlay" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
@@ -246,6 +256,7 @@ function EditTaskModal({ task, onClose, onSave, members }: {
             due_at: toUtcIso(dueAt, timeZone),
             scheduled_start_at: toUtcIso(scheduledStart, timeZone),
             description: desc || null, is_recurring: isRecurring, recurrence_rule: recurrenceRule,
+            ...(isRecurring ? {} : reminderColumns(reminder, itemIso, timeZone, task.whatsapp_remind_at)),
           });
           onClose();
         }}
@@ -292,6 +303,7 @@ function EditTaskModal({ task, onClose, onSave, members }: {
         {!isRecurring && task.task_type === "time_sensitive" && (
           <AppCalendar label="מועד מתוזמן" value={scheduledStart} onChange={setScheduledStart} mode="date" placeholder="בחר תאריך" />
         )}
+        {!isRecurring && <ReminderPicker value={reminder} onChange={setReminder} itemIso={itemIso} timeZone={timeZone} />}
         {isRecurring && (
           <div className="bg-slate-950/60 border border-slate-700 rounded-xl p-3">
             <RecurrenceField days={recurDays} setDays={setRecurDays} time={recurTime} setTime={setRecurTime} />
@@ -322,11 +334,54 @@ function EditTaskModal({ task, onClose, onSave, members }: {
   );
 }
 
+/** Ticking off a shopping task records the purchase in the stock; the DB then closes the task */
+function BoughtSheet({ item, onClose, onConfirm }: {
+  item: Task; onClose: () => void; onConfirm: (bought: number) => void;
+}) {
+  const missing = Math.max(0, Number(item.critical_threshold) - Number(item.quantity));
+  const [bought, setBought] = useState(Math.max(1, Math.ceil(missing)));
+  return (
+    <div className="modal-overlay" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
+      <div className="modal-panel bg-slate-900 border-slate-700 sm:max-w-sm space-y-4">
+        <div className="flex items-center justify-between">
+          <h3 className="font-semibold text-theme">קנית {item.name}?</h3>
+          <button type="button" onClick={onClose} className="-m-2 p-2 rounded-lg text-theme-muted hover:text-theme" aria-label="סגור"><Icon name="x" className="w-5 h-5" /></button>
+        </div>
+        <p className="text-sm text-theme-muted">כמה {item.unit} קנית? המלאי יתעדכן והמשימה תיסגר.</p>
+        <div className="flex items-center gap-2">
+          <button type="button" onClick={() => setBought((b) => Math.max(0.5, b - 1))}
+            className="w-12 h-12 shrink-0 rounded-xl bg-slate-800 border border-slate-700 flex items-center justify-center text-theme" aria-label="פחות">
+            <Icon name="minus" className="w-4 h-4" />
+          </button>
+          <input type="number" inputMode="decimal" min="0" step="0.5" value={bought} onChange={(e) => setBought(Number(e.target.value))}
+            className="input-base w-full text-center text-lg font-bold" />
+          <button type="button" onClick={() => setBought((b) => b + 1)}
+            className="w-12 h-12 shrink-0 rounded-xl bg-slate-800 border border-slate-700 flex items-center justify-center text-theme" aria-label="יותר">
+            <Icon name="plus" className="w-4 h-4" />
+          </button>
+        </div>
+        <p className="text-xs text-theme-muted text-center">
+          במלאי אחרי הקנייה: {Number(item.quantity) + (bought || 0)} {item.unit} (מינימום {Number(item.critical_threshold)})
+        </p>
+        <button type="button" disabled={!(bought > 0)} onClick={() => onConfirm(bought)}
+          className="w-full bg-accent-600 hover:bg-accent-500 disabled:opacity-50 text-white font-medium py-3 sm:py-2.5 rounded-xl sm:rounded-lg text-sm">
+          עדכן מלאי
+        </button>
+      </div>
+    </div>
+  );
+}
+
 export default function Tasks() {
   const navigate = useNavigate();
   const timeZone = usePreferencesStore((s) => s.timeZone);
   const today = getTodayInTimeZone(timeZone);
   const { data: tasks = [], createTask, updateTask, deleteTask, members = [] } = useTasks();
+  const { data: inventory = [], upsertItem } = useInventory();
+  const [buying, setBuying] = useState<Task | null>(null);
+  const queryClient = useQueryClient();
+  // Shopping tasks point at their inventory item (per-item tasks, see migration 010)
+  const itemFor = (task: Task) => inventory.find((i) => i.id === task.source_id);
   const [showModal, setShowModal] = useState(false);
   const [pendingDelete, setPendingDelete] = useState<string | null>(null);
   const [editingTask, setEditingTask] = useState<Task | null>(null);
@@ -407,7 +462,10 @@ export default function Tasks() {
           : "border-slate-800 bg-slate-900")}>
         {/* Checkbox – large hit area around a small circle */}
         <button
-          onClick={() => handleStatusChange(task.id, isDone ? "todo" : "done", task)}
+          onClick={() => {
+            const item = !isDone && isShoppingTask(task) ? itemFor(task) : undefined;
+            if (item) setBuying(item); else handleStatusChange(task.id, isDone ? "todo" : "done", task);
+          }}
           className="p-2.5 shrink-0 rounded-lg"
           aria-label={isDone ? "סמן כלא בוצע" : "סמן כבוצע"}
         >
@@ -422,6 +480,9 @@ export default function Tasks() {
         <button type="button" onClick={() => setEditingTask(task)} className="flex-1 min-w-0 text-right py-1.5">
           <div className="flex items-center gap-1.5 flex-wrap">
             {task.is_recurring && <Icon name="repeat" className="w-3 h-3 text-accent-400 shrink-0" />}
+            {task.whatsapp_remind_at && !task.whatsapp_reminded_at && !isDone && (
+              <Icon name="chat" className="w-3 h-3 text-accent-400 shrink-0" title="תזכורת בוואטסאפ" />
+            )}
             <span className={"text-[15px] sm:text-sm font-medium leading-snug " + (isDone ? "line-through text-theme-muted" : "text-theme")}>
               {task.title}
             </span>
@@ -429,7 +490,20 @@ export default function Tasks() {
               <span className="text-[11px] sm:text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-accent-900 text-accent-300">בביצוע</span>
             )}
           </div>
-          {task.description && <p className="text-xs text-theme-muted truncate mt-0.5 opacity-70">{task.description}</p>}
+          {(() => {
+            const item = isShoppingTask(task) ? itemFor(task) : undefined;
+            if (!item) return task.description && <p className="text-xs text-theme-muted truncate mt-0.5 opacity-70">{task.description}</p>;
+            const qty = Number(item.quantity);
+            const min = Number(item.critical_threshold);
+            const toBuy = Math.max(0, min - qty);
+            return (
+              <p className="text-xs mt-0.5 flex flex-wrap gap-x-2">
+                <span className="text-theme-muted">נשאר {qty} {item.unit}</span>
+                <span className="text-theme-muted">· מינימום {min}</span>
+                {!isDone && toBuy > 0 && <span className="text-warning font-medium">· לקנות {toBuy} {item.unit}</span>}
+              </p>
+            );
+          })()}
           {(relDate || (task.priority_level && !isDone)) && (
             <div className="flex items-center gap-2 mt-1 sm:hidden">{meta}</div>
           )}
@@ -563,6 +637,15 @@ export default function Tasks() {
       {/* Modals */}
       {showModal && <AddTaskModal onClose={() => setShowModal(false)} onAdd={(task) => createTask.mutate(task)} members={members as Array<{ id: string; display_name: string }>} />}
       {editingTask && <EditTaskModal task={editingTask} onClose={() => setEditingTask(null)} onSave={(t) => updateTask.mutate(t)} members={members as Array<{ id: string; display_name: string }>} />}
+      {buying && (
+        <BoughtSheet item={buying} onClose={() => setBuying(null)}
+          onConfirm={(bought) => {
+            // The DB trigger closes the shopping task once stock is back above the minimum
+            upsertItem.mutate({ ...buying, quantity: Number(buying.quantity) + bought },
+              { onSuccess: () => queryClient.invalidateQueries({ queryKey: ["tasks"] }) });
+            setBuying(null);
+          }} />
+      )}
       {pendingDelete && (
         <div className="modal-overlay" onClick={(e) => { if (e.target === e.currentTarget) setPendingDelete(null); }}>
           <div className="modal-panel sm:max-w-sm border-slate-700 bg-slate-900">

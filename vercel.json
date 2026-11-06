@@ -2,8 +2,5 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "framework": "vite",
   "rewrites": [{ "source": "/((?!api|_next|assets|favicon).*)", "destination": "/index.html" }],
-  "crons": [
-    { "path": "/api/daily?slot=summer", "schedule": "0 4 * * *" },
-    { "path": "/api/daily?slot=winter", "schedule": "0 5 * * *" }
-  ]
+  "crons": [{ "path": "/api/whatsapp?tick=1", "schedule": "0 5 * * *" }]
 }

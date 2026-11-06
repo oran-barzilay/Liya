@@ -1,73 +1,21 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import Icon from "./Icon";
+import { useQueryClient } from "@tanstack/react-query";
 import { usePreferencesStore } from "../state/stores/preferencesStore";
-import { zonedDateTimeToUtcIso } from "../lib/datetime";
+import { supabase } from "../lib/supabase";
 
-type Row = Record<string, any>;
 type Msg = { role: "user" | "assistant"; text: string };
 type MsgUpdater = Msg[] | ((prev: Msg[]) => Msg[]);
 
-type AssistantAction = {
-  type?: string;
-  payload?: Record<string, unknown>;
-};
-
 const FALLBACK_MODELS = ["gemini-3.6-flash", "gemini-2.5-flash", "gemini-2.5-pro"];
 
-function getNextOccurrence(days: number[], time: string): string | null {
-  if (!days.length) return null;
-  const [h, m] = (time || "09:00").split(":").map(Number);
-  const now = new Date();
-  for (let i = 0; i <= 7; i++) {
-    const next = new Date(now);
-    next.setDate(now.getDate() + i);
-    if (days.includes(next.getDay())) {
-      next.setHours(h || 9, m || 0, 0, 0);
-      if (next.getTime() > now.getTime()) return next.toISOString();
-    }
-  }
-  return null;
-}
-
-function dateToUtcIso(dateInput: string, timeZone: string): string | null {
-  if (!dateInput) return null;
-  const normalized = dateInput.length === 10 ? `${dateInput}T00:00` : dateInput;
-  try {
-    return zonedDateTimeToUtcIso(normalized, timeZone);
-  } catch {
-    return null;
-  }
-}
-
-function mergeDateAndTimeToUtcIso(dateInput: string, timeInput: string | null | undefined, timeZone: string): string | null {
-  if (!dateInput) return null;
-  const time = typeof timeInput === "string" && timeInput.trim() ? timeInput.trim() : "09:00";
-  return dateToUtcIso(`${dateInput}T${time}`, timeZone);
-}
-
 export default function AiAssistantCard({
-  inventory,
-  tasks,
-  appointments,
-  onAddInventoryItem,
-  onAddTask,
-  onAddEvent,
-  onShiftTaskSchedule,
-  onShiftEventSchedule,
   preferredModel = "",
   standalone = false,
   initialMessage,
   messages: externalMessages,
   onMessagesChange,
 }: {
-  inventory: Row[];
-  tasks: Row[];
-  appointments: Row[];
-  onAddInventoryItem: (item: Row) => Promise<void> | void;
-  onAddTask: (task: Row) => Promise<void> | void;
-  onAddEvent: (event: Row) => Promise<void> | void;
-  onShiftTaskSchedule: (payload: Row) => Promise<void> | void;
-  onShiftEventSchedule: (payload: Row) => Promise<void> | void;
   preferredModel?: string;
   standalone?: boolean;
   initialMessage?: string;
@@ -75,6 +23,7 @@ export default function AiAssistantCard({
   onMessagesChange?: (messages: Msg[]) => void;
 }) {
   const timeZone = usePreferencesStore((s) => s.timeZone);
+  const queryClient = useQueryClient();
   const assistantModel = usePreferencesStore((s) => s.assistantModel);
   const setAssistantModel = usePreferencesStore((s) => s.setAssistantModel);
   const [open, setOpen] = useState(standalone);
@@ -97,19 +46,6 @@ export default function AiAssistantCard({
       setInternalMessages(next);
     }
   };
-
-  const inventoryContext = useMemo(
-    () => inventory.map((i) => ({ name: i.name, quantity: i.quantity, unit: i.unit, critical_threshold: i.critical_threshold, category_id: i.category_id })),
-    [inventory]
-  );
-  const taskContext = useMemo(
-    () => tasks.map((t) => ({ title: t.title, status: t.status, task_type: t.task_type, due_at: t.due_at, scheduled_start_at: t.scheduled_start_at })),
-    [tasks]
-  );
-  const appointmentContext = useMemo(
-    () => appointments.map((a) => ({ title: a.title, starts_at: a.starts_at, provider_name: a.provider_name, location: a.location, status: a.status })),
-    [appointments]
-  );
 
   const selectableModels = useMemo(() => {
     const merged = [assistantModel, recommendedModel, ...availableModels, ...FALLBACK_MODELS]
@@ -148,85 +84,6 @@ export default function AiAssistantCard({
     }
   };
 
-  const runAction = async (action: AssistantAction) => {
-    const payload = action.payload ?? {};
-    if (action.type === "add_inventory_item") {
-      const name = String(payload.name ?? "").trim();
-      if (!name) return;
-      await onAddInventoryItem({
-        name,
-        unit: String(payload.unit ?? "יחידות"),
-        quantity: Number(payload.quantity ?? 1),
-        critical_threshold: Number(payload.critical_threshold ?? 1),
-        notes: payload.notes ? String(payload.notes) : null,
-        auto_restock_task: true,
-      });
-      return;
-    }
-
-    if (action.type === "add_task") {
-      const title = String(payload.title ?? "").trim();
-      if (!title) return;
-
-      const taskType = payload.task_type === "time_sensitive" ? "time_sensitive" : "priority";
-      const isRecurring = Boolean(payload.is_recurring);
-      const recurrenceDays = Array.isArray(payload.recurrence_days)
-        ? payload.recurrence_days.map((d) => Number(d)).filter((d) => Number.isInteger(d) && d >= 0 && d <= 6)
-        : [];
-      const recurrenceTime = typeof payload.recurrence_time === "string" ? payload.recurrence_time : "09:00";
-      const recurrenceRule = isRecurring ? JSON.stringify({ days: recurrenceDays, time: recurrenceTime }) : null;
-      const nextOccurrence = isRecurring ? getNextOccurrence(recurrenceDays, recurrenceTime) : null;
-      const dueDate = typeof payload.due_date === "string" ? payload.due_date : "";
-      const dueTime = typeof payload.due_time === "string" ? payload.due_time : null;
-      const dueAt = isRecurring
-        ? nextOccurrence
-        : mergeDateAndTimeToUtcIso(dueDate, dueTime, timeZone);
-
-      await onAddTask({
-        title,
-        description: payload.description ? String(payload.description) : null,
-        task_type: taskType,
-        status: "todo",
-        module: "general",
-        source_type: "manual",
-        priority_level: taskType === "priority" ? Number(payload.priority_level ?? 3) : null,
-        due_at: taskType === "priority" ? dueAt : null,
-        scheduled_start_at: taskType === "time_sensitive" ? dueAt : null,
-        is_recurring: isRecurring,
-        recurrence_rule: recurrenceRule,
-      });
-      return;
-    }
-
-    if (action.type === "add_event") {
-      const title = String(payload.title ?? "").trim();
-      const date = String(payload.date ?? "").trim();
-      if (!title || !date) return;
-
-      const startAt = mergeDateAndTimeToUtcIso(date, typeof payload.time === "string" ? payload.time : null, timeZone);
-      if (!startAt) return;
-
-      await onAddEvent({
-        title,
-        starts_at: startAt,
-        provider_name: payload.provider_name ? String(payload.provider_name) : null,
-        location: payload.location ? String(payload.location) : null,
-        notes: payload.notes ? String(payload.notes) : null,
-        status: payload.status ? String(payload.status) : "scheduled",
-      });
-      return;
-    }
-
-    if (action.type === "shift_task_schedule") {
-      await onShiftTaskSchedule(payload);
-      return;
-    }
-
-    if (action.type === "shift_event_schedule") {
-      await onShiftEventSchedule(payload);
-    }
-  };
-
   const send = async (rawMessage?: string) => {
     const message = (rawMessage ?? input).trim();
     if (!message || isLoading) return;
@@ -236,45 +93,25 @@ export default function AiAssistantCard({
     setIsLoading(true);
 
     try {
-      const outgoingModel = assistantModel || preferredModel || undefined;
+      // The server reads the household data and makes the changes as this user
+      const { data: session } = await supabase.auth.getSession();
       const res = await fetch("/api/assistant", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          message,
-          model: outgoingModel,
-          context: {
-            inventory: inventoryContext,
-            tasks: taskContext,
-            appointments: appointmentContext,
-          },
-        }),
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${session.session?.access_token ?? ""}` },
+        body: JSON.stringify({ message, model: assistantModel || preferredModel || undefined, timeZone }),
       });
 
-      const responseText = await res.text();
-      let data: { reply?: string; actions?: AssistantAction[]; error?: string; detail?: string } = {};
-      if (responseText.trim()) {
-        try {
-          data = JSON.parse(responseText) as { reply?: string; actions?: AssistantAction[]; error?: string; detail?: string };
-        } catch {
-          setMessages((prev) => [...prev, { role: "assistant", text: `לא הצלחתי כרגע: תשובת שרת לא תקינה (${res.status}).` }]);
-          return;
-        }
-      }
+      const data = (await res.json().catch(() => ({}))) as { reply?: string; results?: string[]; error?: string; detail?: string };
       if (!res.ok) {
-        const text = data.detail || data.error || `שגיאה ${res.status}`;
-        setMessages((prev) => [...prev, { role: "assistant", text: `לא הצלחתי כרגע: ${text}` }]);
+        setMessages((prev) => [...prev, { role: "assistant", text: `לא הצלחתי כרגע: ${data.detail || data.error || `שגיאה ${res.status}`}` }]);
         return;
       }
 
-      const actions = Array.isArray(data.actions) ? data.actions : [];
-      for (const action of actions) {
-        // eslint-disable-next-line no-await-in-loop
-        await runAction(action);
+      const results = Array.isArray(data.results) ? data.results : [];
+      if (results.length) {
+        for (const key of ["tasks", "inventory", "appointments"]) void queryClient.invalidateQueries({ queryKey: [key] });
       }
-
-      const suffix = actions.length > 0 ? `\n\nבוצעו ${actions.length} פעולות באפליקציה.` : "";
-      setMessages((prev) => [...prev, { role: "assistant", text: (data.reply ?? "בוצע.") + suffix }]);
+      setMessages((prev) => [...prev, { role: "assistant", text: [data.reply ?? "בוצע.", ...results].join("\n") }]);
     } catch (err) {
       const text = err instanceof Error ? err.message : "שגיאת רשת";
       setMessages((prev) => [...prev, { role: "assistant", text: `לא הצלחתי כרגע: ${text}` }]);

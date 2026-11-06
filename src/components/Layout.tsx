@@ -13,6 +13,7 @@ const NAV_ITEMS = [
   { to: "/baby",      icon: "babies"    as const, label: "תינוקות" },
   { to: "/finance",   icon: "finance"   as const, label: "כספים"   },
   { to: "/trips",     icon: "plane"     as const, label: "טיולים"  },
+  { to: "/whatsapp",  icon: "send"      as const, label: "וואטסאפ" },
   { to: "/assistant", icon: "chat"      as const, label: "צ'אט"    },
 ] as const;
 

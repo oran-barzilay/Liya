@@ -17,6 +17,7 @@ import Finance from "./pages/Finance";
 import Settings from "./pages/Settings";
 import Trips from "./pages/Trips";
 import TripDetail from "./pages/TripDetail";
+import WhatsApp from "./pages/WhatsApp";
 
 function AppRoutes() {
   const { user, loading: authLoading, isRecovery, clearRecovery } = useAuth();
@@ -66,6 +67,7 @@ function AppRoutes() {
         <Route path="/finance" element={<Finance />} />
         <Route path="/trips" element={<Trips />} />
         <Route path="/trips/:tripId" element={<TripDetail />} />
+        <Route path="/whatsapp" element={<WhatsApp />} />
         <Route path="/settings" element={<Settings />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>

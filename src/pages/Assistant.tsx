@@ -8,25 +8,15 @@ import { useChatHistory } from "../hooks/useChatHistory";
 import { useHouseholdSettings } from "../hooks/useHouseholdSettings";
 import Icon from "../components/Icon";
 
-function normalizeTitle(val: string): string {
-  return val.trim().toLowerCase();
-}
 
-function shiftIsoDate(iso: string, hoursDelta: number, monthsDelta: number): string | null {
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return null;
-  if (monthsDelta) d.setMonth(d.getMonth() + monthsDelta);
-  if (hoursDelta) d.setHours(d.getHours() + hoursDelta);
-  return d.toISOString();
-}
 
 export default function Assistant() {
   const [params, setParams] = useSearchParams();
   const [pendingInitialMessage, setPendingInitialMessage] = useState(() => (params.get("q") ?? "").trim());
 
-  const { data: inventory = [], upsertItem } = useInventory();
-  const { data: tasks = [], createTask, updateTask } = useTasks();
-  const { data: appointments = [], upsertAppointment } = useAppointments();
+  const { data: inventory = [] } = useInventory();
+  const { data: tasks = [] } = useTasks();
+  const { data: appointments = [] } = useAppointments();
   const { data: householdSettings } = useHouseholdSettings();
 
   const {
@@ -45,120 +35,6 @@ export default function Assistant() {
       createConversation();
     }
   }, []);
-
-  const addInventoryFromAi = (item: Record<string, any>) =>
-    new Promise<void>((resolve, reject) => {
-      upsertItem.mutate(item, {
-        onSuccess: () => resolve(),
-        onError: (err) => reject(err),
-      });
-    });
-
-  const addTaskFromAi = (task: Record<string, any>) =>
-    new Promise<void>((resolve, reject) => {
-      createTask.mutate(task, {
-        onSuccess: () => resolve(),
-        onError: (err) => reject(err),
-      });
-    });
-
-  const addEventFromAi = (event: Record<string, any>) =>
-    new Promise<void>((resolve, reject) => {
-      upsertAppointment.mutate(event, {
-        onSuccess: () => resolve(),
-        onError: (err) => reject(err),
-      });
-    });
-
-  const shiftTaskFromAi = (payload: Record<string, any>) =>
-    new Promise<void>((resolve, reject) => {
-      const title = normalizeTitle(String(payload.title ?? ""));
-      if (!title) {
-        resolve();
-        return;
-      }
-
-      const hoursDelta = Number(payload.hours_delta ?? 0);
-      const monthsDelta = Number(payload.months_delta ?? 0);
-      const exactMatches = tasks.filter((t) => normalizeTitle(String(t.title ?? "")) === title);
-      const fallbackMatches = tasks.filter((t) => normalizeTitle(String(t.title ?? "")).includes(title));
-      const candidates = (exactMatches.length ? exactMatches : fallbackMatches)
-        .filter((t) => t.status !== "done" && t.status !== "cancelled")
-        .sort((a, b) => {
-          const aAt = String(a.scheduled_start_at ?? a.due_at ?? "9999-12-31T00:00:00.000Z");
-          const bAt = String(b.scheduled_start_at ?? b.due_at ?? "9999-12-31T00:00:00.000Z");
-          return aAt.localeCompare(bAt);
-        });
-      const target = candidates[0];
-      if (!target) {
-        resolve();
-        return;
-      }
-
-      const dateField = target.task_type === "time_sensitive" ? "scheduled_start_at" : "due_at";
-      const currentIso = String(target[dateField] ?? target.scheduled_start_at ?? target.due_at ?? "");
-      if (!currentIso) {
-        resolve();
-        return;
-      }
-
-      const shifted = shiftIsoDate(currentIso, Number.isFinite(hoursDelta) ? hoursDelta : 0, Number.isFinite(monthsDelta) ? monthsDelta : 0);
-      if (!shifted) {
-        resolve();
-        return;
-      }
-
-      updateTask.mutate(
-        { id: target.id, [dateField]: shifted },
-        {
-          onSuccess: () => resolve(),
-          onError: (err) => reject(err),
-        }
-      );
-    });
-
-  const shiftEventFromAi = (payload: Record<string, any>) =>
-    new Promise<void>((resolve, reject) => {
-      const title = normalizeTitle(String(payload.title ?? ""));
-      if (!title) {
-        resolve();
-        return;
-      }
-
-      const hoursDelta = Number(payload.hours_delta ?? 0);
-      const monthsDelta = Number(payload.months_delta ?? 0);
-      const nowIso = new Date().toISOString();
-      const exactMatches = appointments.filter((a) => normalizeTitle(String(a.title ?? "")) === title);
-      const fallbackMatches = appointments.filter((a) => normalizeTitle(String(a.title ?? "")).includes(title));
-      const candidates = (exactMatches.length ? exactMatches : fallbackMatches)
-        .sort((a, b) => {
-          const aAt = String(a.starts_at ?? "9999-12-31T00:00:00.000Z");
-          const bAt = String(b.starts_at ?? "9999-12-31T00:00:00.000Z");
-          const aUpcoming = aAt >= nowIso ? 0 : 1;
-          const bUpcoming = bAt >= nowIso ? 0 : 1;
-          if (aUpcoming !== bUpcoming) return aUpcoming - bUpcoming;
-          return aAt.localeCompare(bAt);
-        });
-      const target = candidates[0];
-      if (!target?.starts_at) {
-        resolve();
-        return;
-      }
-
-      const shifted = shiftIsoDate(String(target.starts_at), Number.isFinite(hoursDelta) ? hoursDelta : 0, Number.isFinite(monthsDelta) ? monthsDelta : 0);
-      if (!shifted) {
-        resolve();
-        return;
-      }
-
-      upsertAppointment.mutate(
-        { id: target.id, starts_at: shifted },
-        {
-          onSuccess: () => resolve(),
-          onError: (err) => reject(err),
-        }
-      );
-    });
 
   const description = useMemo(
     () => `אפשר לשאול על קניות, משימות ואירועים. כרגע ${inventory.length} פריטים, ${tasks.length} משימות ו-${appointments.length} אירועים.`,
@@ -249,14 +125,6 @@ export default function Assistant() {
               standalone
               initialMessage={pendingInitialMessage || undefined}
               preferredModel={householdSettings?.assistant_model || ""}
-              inventory={inventory as Array<Record<string, any>>}
-              tasks={tasks as Array<Record<string, any>>}
-              appointments={appointments as Array<Record<string, any>>}
-              onAddInventoryItem={addInventoryFromAi}
-              onAddTask={addTaskFromAi}
-              onAddEvent={addEventFromAi}
-              onShiftTaskSchedule={shiftTaskFromAi}
-              onShiftEventSchedule={shiftEventFromAi}
               messages={activeConversation.messages}
               onMessagesChange={(msgs) => {
                 if (pendingInitialMessage && msgs.length > 0) {

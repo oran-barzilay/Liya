@@ -28,7 +28,7 @@ const KIND_LABEL: Record<WhatsappLogEntry["kind"], string> = {
 };
 const COMMAND_EXAMPLES = [
   "תוסיף חלב ולחם לרשימה",
-  "קניתי 2 קרטוני חלב",
+  "קניתי 2 קרטוני חלב (עובד גם בלי מילת ההפעלה)",
   "סמני את הארנונה כבוצע",
   "תעביר את איסוף מהגן ללינוי",
   "תמחק את המשימה להחליף מצעים",
@@ -405,6 +405,15 @@ export default function WhatsApp() {
               {connecting ? "מפעיל..." : "הפעל האזנה לקבוצה"}
             </button>
           )}
+          <div className="flex items-start justify-between gap-3 rounded-xl bg-slate-800 px-4 py-3 mb-4">
+            <div>
+              <div className="text-sm text-theme font-medium">זיהוי קניות אוטומטי</div>
+              <div className="text-xs text-theme-muted mt-0.5">
+                "קניתי חלב" מעדכן את המלאי ועונה מה נשאר לקנות — גם בלי מילת ההפעלה. הודעות שלא קשורות למלאי לא יקבלו תשובה.
+              </div>
+            </div>
+            <Toggle label="זיהוי קניות אוטומטי" on={s.purchase_detection} onChange={(v) => saveSettings.mutate({ purchase_detection: v })} />
+          </div>
           <label className="text-xs text-theme-muted block mb-1" htmlFor="trigger">מילת הפעלה</label>
           <input id="trigger" defaultValue={s.assistant_trigger} key={s.assistant_trigger}
             onBlur={(e) => e.target.value.trim() && e.target.value.trim() !== s.assistant_trigger && saveSettings.mutate({ assistant_trigger: e.target.value.trim() })}

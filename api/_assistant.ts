@@ -166,7 +166,7 @@ const ACTION_DOCS = [
   "- update_event: id or title, then any of: new_title, date, time, location, provider_name, notes, status (scheduled|completed|cancelled).",
   "- delete_event: id or title.",
   "- shift_task_schedule / shift_event_schedule: id or title, hours_delta, months_delta.",
-  "Shopping list = inventory items whose quantity is below critical_threshold. \"Bought X\" means update_inventory_item with a positive quantity_delta.",
+  "Shopping list = inventory items whose quantity is below critical_threshold. \"Bought X\" means update_inventory_item with a positive quantity_delta; if no amount is given, use quantity_delta = max(1, critical_threshold - quantity).",
   "Shopping tasks (module=inventory) close automatically when stock is back above the minimum — prefer updating the inventory item.",
   "Only emit actions when the user clearly asks to change something. For questions, answer from context with no actions.",
   "Never invent rows. If something to edit/delete is not in context, say so in the reply and emit no action for it.",
@@ -180,6 +180,8 @@ export async function askAssistant(opts: {
   model?: string | null;
   sender?: string | null;
   channel: "app" | "whatsapp";
+  /** "purchase": a casual group message that mentions buying — only stock updates, silence otherwise */
+  mode?: "command" | "purchase";
   now?: Date;
 }): Promise<{ reply: string; actions: AssistantAction[] }> {
   const now = opts.now ?? new Date();
@@ -192,6 +194,12 @@ export async function askAssistant(opts: {
       ? "You are answering inside the family WhatsApp group: keep the reply short (1-3 lines), friendly, in Hebrew, WhatsApp formatting (*bold*) allowed."
       : "Reply in Hebrew.",
     opts.sender ? `The message was written by: ${opts.sender}.` : "",
+    opts.mode === "purchase"
+      ? "PURCHASE MODE: this is an ordinary family chat message (not addressed to you) that mentions buying something. "
+        + "Only if it reports items that were bought and that exist in Inventory, emit update_inventory_item with a positive quantity_delta for each, "
+        + "and a very short thanks as the reply. Emit no other action types. If it is a question, a request (\"צריך לקנות\"), or about things not in Inventory, "
+        + "return {\"reply\": \"\", \"actions\": []}."
+      : "",
     "Return ONLY valid JSON, no markdown: {\"reply\": string, \"actions\": [{\"type\": string, \"payload\": object}]}",
     ACTION_DOCS,
   ].filter(Boolean).join("\n");
@@ -260,11 +268,19 @@ export interface ExecContext {
   now?: Date;
 }
 
-/** Runs the assistant's actions; returns one Hebrew line per action */
-export async function executeActions(ctx: ExecContext, actions: AssistantAction[]): Promise<string[]> {
+/** One line with what is still on the shopping list after a change */
+export async function shoppingListLine(db: Db, householdId: string): Promise<string> {
+  const items = await db<Row[]>(`inventory?household_id=eq.${householdId}&select=name,quantity,critical_threshold&order=name`);
+  const missing = items.filter((i) => Number(i.quantity) < Number(i.critical_threshold)).map((i) => i.name);
+  return missing.length ? `🛒 נשאר לקנות: ${missing.join(", ")}` : "🎉 רשימת הקניות הושלמה!";
+}
+
+/** Runs the assistant's actions; returns one Hebrew line per action and whether stock changed */
+export async function executeActions(ctx: ExecContext, actions: AssistantAction[]): Promise<{ lines: string[]; inventoryChanged: boolean }> {
   const { db, householdId, actorId, timeZone, context } = ctx;
   const now = ctx.now ?? new Date();
   const lines: string[] = [];
+  let inventoryChanged = false;
   const memberId = (name: unknown) => {
     const n = norm(name);
     return n ? context.members.find((m) => norm(m.display_name) === n || norm(m.display_name).startsWith(n))?.id ?? null : null;
@@ -285,6 +301,7 @@ export async function executeActions(ctx: ExecContext, actions: AssistantAction[
             } else {
               const quantity = Math.max(0, Number(existing.critical_threshold) - 1);
               await db(`inventory?id=eq.${existing.id}`, { method: "PATCH", body: { quantity, updated_by: actorId } });
+              inventoryChanged = true;
               lines.push(`🛒 ${existing.name} נוסף לרשימת הקניות`);
             }
             break;
@@ -294,6 +311,7 @@ export async function executeActions(ctx: ExecContext, actions: AssistantAction[
             quantity: Number(p.quantity ?? 0), critical_threshold: Number(p.critical_threshold ?? 1),
             notes: p.notes ? String(p.notes) : null, auto_restock_task: true, updated_by: actorId,
           } });
+          inventoryChanged = true;
           lines.push(`🛒 נוסף: ${name}`);
           break;
         }
@@ -307,6 +325,7 @@ export async function executeActions(ctx: ExecContext, actions: AssistantAction[
           if (p.new_name) patch.name = String(p.new_name);
           if (p.unit) patch.unit = String(p.unit);
           await db(`inventory?id=eq.${item.id}`, { method: "PATCH", body: patch });
+          inventoryChanged = true;
           lines.push(patch.quantity !== undefined
             ? `✅ ${patch.name ?? item.name}: ${patch.quantity} ${item.unit}`
             : `✅ עודכן: ${patch.name ?? item.name}`);
@@ -316,6 +335,7 @@ export async function executeActions(ctx: ExecContext, actions: AssistantAction[
           const item = findRow(context.inventory, p, "name");
           if (!item) { lines.push(`⚠️ לא מצאתי במלאי: ${p.name ?? p.id}`); break; }
           await db(`inventory?id=eq.${item.id}`, { method: "DELETE" });
+          inventoryChanged = true;
           lines.push(`🗑️ הוסר מהמלאי: ${item.name}`);
           break;
         }
@@ -416,5 +436,5 @@ export async function executeActions(ctx: ExecContext, actions: AssistantAction[
       lines.push(`❌ ${action.type}: ${e instanceof Error ? e.message.slice(0, 120) : "שגיאה"}`);
     }
   }
-  return lines;
+  return { lines, inventoryChanged };
 }

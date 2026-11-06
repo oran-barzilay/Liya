@@ -24,6 +24,7 @@ export interface WhatsappSettings {
   last_weekly_sent_on: string | null;
   assistant_enabled: boolean;
   assistant_trigger: string;
+  purchase_detection: boolean;
 }
 
 export interface WhatsappMessage {
@@ -62,6 +63,7 @@ export const DEFAULT_SETTINGS: Omit<WhatsappSettings, "household_id"> = {
   last_weekly_sent_on: null,
   assistant_enabled: true,
   assistant_trigger: "פאמי",
+  purchase_detection: true,
 };
 
 /** Calls the server endpoint as the signed-in user */

@@ -2,7 +2,7 @@ import {
   buildDigest, buildReminder, buildWeekly, localDate,
   type DigestEvent, type DigestSection, type DigestStockItem, type DigestTask, type WeeklySection,
 } from "./_digest";
-import { askAssistant, executeActions, loadContext, makeDb } from "./_assistant";
+import { askAssistant, executeActions, loadContext, makeDb, shoppingListLine } from "./_assistant";
 
 export const config = { runtime: "edge" };
 
@@ -52,6 +52,7 @@ type Settings = {
   last_weekly_sent_on: string | null;
   assistant_enabled: boolean;
   assistant_trigger: string;
+  purchase_detection: boolean;
 };
 type Kind = "daily" | "weekly" | "custom" | "reminder" | "manual" | "assistant";
 type CustomMessage = { id: string; text: string; weekdays: number[]; send_time: string; last_sent_on: string | null };
@@ -246,7 +247,7 @@ async function settingsFor(householdId: string): Promise<Settings> {
     household_id: householdId, enabled: true, group_id: null, group_name: null, daily_enabled: true,
     daily_time: "07:30:00", time_zone: "Asia/Jerusalem", sections: {}, greeting: null, last_daily_sent_on: null,
     weekly_enabled: false, weekly_day: 6, weekly_time: "20:00:00", weekly_sections: {}, weekly_greeting: null, last_weekly_sent_on: null,
-    assistant_enabled: true, assistant_trigger: "פאמי",
+    assistant_enabled: true, assistant_trigger: "פאמי", purchase_detection: true,
   };
 }
 
@@ -276,6 +277,17 @@ export function commandText(text: string, trigger: string): string | null {
   return null;
 }
 
+// "קניתי", "וקנינו", "הבאתי"… — a past-tense report of buying (not "צריך לקנות")
+const PURCHASE_WORDS = new Set(["קניתי", "קנינו", "קנתה", "קנית", "הבאתי", "הבאנו", "לקחתי", "bought"]);
+
+/** True when a casual group message reports a purchase, so it can update stock without the trigger word */
+export function mentionsPurchase(text: string): boolean {
+  return text
+    .toLowerCase()
+    .split(/[^\p{L}]+/u)
+    .some((word) => PURCHASE_WORDS.has(word) || PURCHASE_WORDS.has(word.replace(/^(ו|ש|כש)/, "")));
+}
+
 async function handleWebhook(event: GreenWebhook) {
   // Messages typed in WhatsApp by anyone (incl. the linked phone itself); never our own API sends
   if (event.typeWebhook !== "incomingMessageReceived" && event.typeWebhook !== "outgoingMessageReceived") return "ignored: type";
@@ -286,7 +298,9 @@ async function handleWebhook(event: GreenWebhook) {
   const [s] = await db<Settings[]>(`whatsapp_settings?group_id=eq.${encodeURIComponent(chatId)}&enabled=eq.true&select=*`);
   if (!s || !s.assistant_enabled) return "ignored: not the family group";
   const command = commandText(text, s.assistant_trigger || "פאמי");
-  if (command === null) return "ignored: no trigger";
+  // Without the trigger word, only purchase reports are handled (and only if they touch the stock)
+  const purchase = command === null && s.purchase_detection !== false && mentionsPurchase(text);
+  if (command === null && !purchase) return "ignored: no trigger";
 
   // Process each WhatsApp message once (Green API retries webhooks it thinks failed)
   const claimed = await fetch(`${supabaseUrl()}/rest/v1/whatsapp_inbox`, {
@@ -300,7 +314,7 @@ async function handleWebhook(event: GreenWebhook) {
   if (!Array.isArray(claimed) || !claimed.length) return "ignored: duplicate";
 
   const senderName = event.senderData?.senderName || event.senderData?.senderContactName || null;
-  if (!command) {
+  if (command === "") {
     await send(s.household_id, chatId, "assistant", "כן? 🙂 לדוגמה: *פאמי תוסיף חלב*, *פאמי סמני את הארנונה כבוצע*", event.idMessage);
     return "greeted";
   }
@@ -316,14 +330,27 @@ async function handleWebhook(event: GreenWebhook) {
 
   let reply: string;
   try {
-    const answer = await askAssistant({ apiKey, message: command, context, timeZone: s.time_zone, sender: senderName, channel: "whatsapp" });
-    const results = await executeActions({ db: serviceDb, householdId: s.household_id, actorId: actor.id, timeZone: s.time_zone, context }, answer.actions);
-    reply = [answer.reply, ...results].filter(Boolean).join("\n");
+    const answer = await askAssistant({
+      apiKey, message: command ?? text, context, timeZone: s.time_zone, sender: senderName, channel: "whatsapp",
+      mode: purchase ? "purchase" : "command",
+    });
+    // A purchase report may only update stock, never add/delete/edit anything else
+    const actions = purchase ? answer.actions.filter((a) => a.type === "update_inventory_item") : answer.actions;
+    const { lines, inventoryChanged } = await executeActions(
+      { db: serviceDb, householdId: s.household_id, actorId: actor.id, timeZone: s.time_zone, context }, actions);
+    // Stay silent when a casual "קניתי…" wasn't about anything we track
+    if (purchase && !inventoryChanged) return "ignored: purchase not in stock";
+    reply = [
+      answer.reply,
+      ...(purchase ? lines.filter((l) => !l.startsWith("⚠️")) : lines),
+      inventoryChanged ? await shoppingListLine(serviceDb, s.household_id) : "",
+    ].filter(Boolean).join("\n");
   } catch (e) {
+    if (purchase) return "ignored: purchase error";
     reply = `לא הצלחתי כרגע 😕 ${e instanceof Error ? e.message.slice(0, 120) : ""}`;
   }
   await send(s.household_id, chatId, "assistant", reply, event.idMessage);
-  return "answered";
+  return purchase ? "purchase recorded" : "answered";
 }
 
 export default async function handler(req: Request): Promise<Response> {

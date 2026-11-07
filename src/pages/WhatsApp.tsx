@@ -381,6 +381,32 @@ export default function WhatsApp() {
         </div>
       </Card>
 
+      {/* Shopping list in the summaries */}
+      <Card title="רשימת קניות בסיכומים" icon="package">
+        <p className="text-xs text-theme-muted mb-3">אילו מוצרים יופיעו תחת "לקנות" בסיכום היומי והשבועי.</p>
+        <div className="grid grid-cols-3 gap-2 mb-4">
+          {([
+            ["low", "מלאי נמוך", "מתחת למינימום"],
+            ["at_or_below", "כולל על הסף", "במינימום או מתחתיו"],
+            ["out", "רק מה שנגמר", "לא נשאר כלום"],
+          ] as const).map(([value, label, hint]) => (
+            <button key={value} type="button" onClick={() => saveSettings.mutate({ shopping_filter: value })}
+              className={"rounded-xl border px-2 py-2.5 text-center transition-colors " +
+                (s.shopping_filter === value ? "bg-accent-600 border-accent-600 text-white" : "border-slate-700 text-theme-muted hover:text-theme")}>
+              <div className="text-sm font-medium">{label}</div>
+              <div className="text-[11px] opacity-80 mt-0.5">{hint}</div>
+            </button>
+          ))}
+        </div>
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <div className="text-sm text-theme">להראות כמה חסר</div>
+            <div className="text-xs text-theme-muted">לדוגמה: פפסי (חסר 1)</div>
+          </div>
+          <Toggle label="להראות כמה חסר" on={s.shopping_show_missing} onChange={(v) => saveSettings.mutate({ shopping_show_missing: v })} />
+        </div>
+      </Card>
+
       {/* Recurring messages */}
       <Card title="הודעות חוזרות" icon="repeat"
         action={<button type="button" onClick={() => setEditing({})} className="text-sm text-accent-400 flex items-center gap-1 py-1"><Icon name="plus" className="w-4 h-4" /> הוספה</button>}>

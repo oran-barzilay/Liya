@@ -53,6 +53,8 @@ type Settings = {
   assistant_enabled: boolean;
   assistant_trigger: string;
   purchase_detection: boolean;
+  shopping_filter: "low" | "at_or_below" | "out";
+  shopping_show_missing: boolean;
 };
 type Kind = "daily" | "weekly" | "custom" | "reminder" | "manual" | "assistant";
 type CustomMessage = { id: string; text: string; weekdays: number[]; send_time: string; last_sent_on: string | null };
@@ -134,7 +136,11 @@ async function buildSummary(kind: "daily" | "weekly", s: Settings, now: Date, ov
     db<DigestStockItem[]>(`inventory?${h}&select=id,name,quantity,critical_threshold,unit`),
     db<{ id: string; display_name: string }[]>(`users?${h}&select=id,display_name`),
   ]);
-  const base = { now, timeZone: s.time_zone, tasks, events, inventory, site: siteUrl(), members: Object.fromEntries(users.map((u) => [u.id, u.display_name])) };
+  const base = {
+    now, timeZone: s.time_zone, tasks, events, inventory, site: siteUrl(),
+    members: Object.fromEntries(users.map((u) => [u.id, u.display_name])),
+    shoppingFilter: s.shopping_filter ?? "low", showMissing: !!s.shopping_show_missing,
+  };
   return kind === "weekly"
     ? buildWeekly({ ...base, sections: overrides.sections ?? s.weekly_sections, greeting: overrides.greeting !== undefined ? overrides.greeting : s.weekly_greeting })
     : buildDigest({ ...base, sections: overrides.sections ?? s.sections, greeting: overrides.greeting !== undefined ? overrides.greeting : s.greeting });
@@ -251,6 +257,7 @@ async function settingsFor(householdId: string): Promise<Settings> {
     daily_time: "07:30:00", time_zone: "Asia/Jerusalem", sections: {}, greeting: null, last_daily_sent_on: null,
     weekly_enabled: false, weekly_day: 6, weekly_time: "20:00:00", weekly_sections: {}, weekly_greeting: null, last_weekly_sent_on: null,
     assistant_enabled: true, assistant_trigger: "פאמי", purchase_detection: true,
+    shopping_filter: "low", shopping_show_missing: false,
   };
 }
 

@@ -40,7 +40,19 @@ export interface DigestInput {
   members: Record<string, string>; // user id → display name
   /** App address; when set, tasks get a tap-to-open link and long lists are trimmed */
   site?: string | null;
+  /** Which products count as "to buy": below the minimum (default), at or below it, or run out */
+  shoppingFilter?: ShoppingFilter;
+  /** Write how much is missing next to each product */
+  showMissing?: boolean;
 }
+
+export type ShoppingFilter = "low" | "at_or_below" | "out";
+
+const inShoppingList = (i: DigestStockItem, filter: ShoppingFilter = "low") => {
+  const qty = Number(i.quantity);
+  const min = Number(i.critical_threshold);
+  return filter === "out" ? qty <= 0 : filter === "at_or_below" ? qty <= min && min > 0 : qty < min;
+};
 
 /** Lists in WhatsApp show at most this many items, then a link to the full list */
 export const LIST_LIMIT = 5;
@@ -94,7 +106,11 @@ function prepare(input: Omit<DigestInput, "sections" | "greeting">) {
     const who = t.assigned_to && members[t.assigned_to] ? ` — ${members[t.assigned_to]}` : "";
     return `• ${time}${t.title}${who}${site && t.id ? `\n   ${links.task(site, t.id)}` : ""}`;
   };
-  const shoppingItems = input.inventory.filter((i) => Number(i.quantity) < Number(i.critical_threshold));
+  const shoppingItems = input.inventory.filter((i) => inShoppingList(i, input.shoppingFilter));
+  const shoppingName = (i: DigestStockItem) => {
+    const missing = Number(i.critical_threshold) - Number(i.quantity);
+    return input.showMissing && missing > 0 ? `${i.name} (חסר ${missing})` : i.name;
+  };
   return {
     today,
     site,
@@ -107,7 +123,7 @@ function prepare(input: Omit<DigestInput, "sections" | "greeting">) {
     overdue: tasks
       .filter((t) => localDate(when(t)!, timeZone) < today)
       .sort((a, b) => when(a)!.localeCompare(when(b)!)),
-    shopping: shoppingItems.map((i) => i.name),
+    shopping: shoppingItems.map(shoppingName),
     taskLine,
     eventLine: (e: DigestEvent) => {
       const extra = [e.provider_name, e.location].filter(Boolean).join(", ");
@@ -119,7 +135,7 @@ function prepare(input: Omit<DigestInput, "sections" | "greeting">) {
         site ? links.tasks(site) : null)].join("\n"),
     /** Compact shopping section: names (capped) + link to the full list */
     shoppingSection: () => {
-      const names = shoppingItems.map((i) => i.name);
+      const names = shoppingItems.map(shoppingName);
       if (!site || names.length <= LIST_LIMIT) return `🛒 *לקנות*\n${names.join(", ")}`;
       return `🛒 *לקנות*\n${names.slice(0, LIST_LIMIT).join(", ")} ועוד ${names.length - LIST_LIMIT}\nהרשימה המלאה: ${links.shopping(site)}`;
     },

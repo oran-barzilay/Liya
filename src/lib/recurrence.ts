@@ -2,7 +2,9 @@
 // No browser/store imports — shared by the app and the server (api/_assistant.ts).
 //
 // recurrence_rule JSON:
-//   weekly / biweekly: { "freq": "weekly" | "biweekly", "days": [0-6], "time": "HH:mm" }  (legacy rules have no freq)
+//   weekly:   { "freq": "weekly", "days": [0-6], "time": "HH:mm" }  (legacy rules have no freq)
+//   biweekly: { "freq": "biweekly", "days": [0-6], "time": "HH:mm", "start": "YYYY-MM-DD" }
+//             — "on" weeks are counted from the start date's week
 //   monthly-based: { "freq": "monthly" | "bimonthly" | "quarterly" | "semiannual" | "yearly",
 //                    "day": 1-31, "time": "HH:mm" }   — the month comes from the current occurrence
 
@@ -16,6 +18,8 @@ export interface RecurrenceRule {
   days?: number[];
   day?: number;
   time: string;
+  /** Start date; for biweekly it fixes which weeks are "on" */
+  start?: string;
 }
 
 export const FREQUENCIES: Frequency[] = ["weekly", "biweekly", "monthly", "bimonthly", "quarterly", "semiannual", "yearly"];
@@ -39,7 +43,7 @@ export function parseRule(json: string | null | undefined): RecurrenceRule | nul
   try {
     const r = JSON.parse(json) as Partial<RecurrenceRule>;
     const freq = (FREQUENCIES as string[]).includes(String(r.freq)) ? (r.freq as Frequency) : "weekly";
-    return { freq, days: r.days ?? [], day: r.day, time: r.time || "09:00" };
+    return { freq, days: r.days ?? [], day: r.day, time: r.time || "09:00", start: r.start };
   } catch {
     return null;
   }
@@ -50,7 +54,8 @@ export function describeRule(rule: RecurrenceRule, anchorDate?: string | null): 
   if (isWeekBased(rule.freq)) {
     const letters = ["א׳", "ב׳", "ג׳", "ד׳", "ה׳", "ו׳", "ש׳"];
     const every = rule.freq === "biweekly" ? "כל שבועיים" : "כל שבוע";
-    return `${every}${rule.days?.length ? ` · ${[...rule.days].sort().map((d) => letters[d]).join(" ")}` : ""}`;
+    const from = rule.freq === "biweekly" && rule.start ? ` · החל מ-${rule.start.slice(8, 10)}.${rule.start.slice(5, 7)}` : "";
+    return `${every}${rule.days?.length ? ` · ${[...rule.days].sort().map((d) => letters[d]).join(" ")}` : ""}${from}`;
   }
   const months = MONTHS_BETWEEN[rule.freq];
   const every = months === 1 ? "כל חודש" : months === 12 ? "כל שנה" : `כל ${months} חודשים`;
@@ -121,8 +126,9 @@ export function nextOccurrence(rule: RecurrenceRule, timeZone: string, after: Da
   if (isWeekBased(rule.freq)) {
     const days = rule.days ?? [];
     if (!days.length) return null;
-    // Bi-weekly: only weeks (Sunday-based) an even number of weeks from the current occurrence's week
-    const anchorWeek = weekNumber(current ? localDateOf(current, timeZone) : localDateOf(after, timeZone));
+    // Bi-weekly: only weeks (Sunday-based) an even number of weeks from the start date's week
+    // (older rules without a start date count from the current occurrence)
+    const anchorWeek = weekNumber(rule.start ?? (current ? localDateOf(current, timeZone) : localDateOf(after, timeZone)));
     for (let i = 0; i <= 14; i++) {
       const date = localDateOf(new Date(after.getTime() + i * 86_400_000), timeZone);
       const weekday = localParts(new Date(`${date}T12:00:00Z`), "UTC").weekday;
@@ -142,4 +148,16 @@ export function nextOccurrence(rule: RecurrenceRule, timeZone: string, after: Da
     if (at && Date.parse(at) > after.getTime()) return at;
   }
   return null;
+}
+
+/**
+ * The first occurrence of a newly configured rule: on or after its start date (and in the future).
+ * Monthly-based rules start exactly on the start date; weekday rules on the first matching day.
+ */
+export function firstOccurrence(rule: RecurrenceRule, timeZone: string, now = new Date()): string | null {
+  const startAt = rule.start ? zonedToUtc(rule.start, "00:00", timeZone) : null;
+  if (!isWeekBased(rule.freq)) return rule.start ? zonedToUtc(rule.start, rule.time, timeZone) : null;
+  // Just before the start of the start day, so a matching start day itself counts
+  const from = startAt && Date.parse(startAt) > now.getTime() ? new Date(Date.parse(startAt) - 1) : now;
+  return nextOccurrence(rule, timeZone, from);
 }

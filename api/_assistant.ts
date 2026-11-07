@@ -1,5 +1,5 @@
 import { renderShoppingList, renderTaskList, localDate } from "./_digest";
-import { FREQUENCIES, isWeekBased, nextOccurrence, parseRule, zonedToUtc, type Frequency, type RecurrenceRule } from "../src/lib/recurrence";
+import { FREQUENCIES, firstOccurrence, nextOccurrence, parseRule, zonedToUtc, type Frequency, type RecurrenceRule } from "../src/lib/recurrence";
 
 // Shared household assistant: Gemini call + server-side action execution.
 // Used by the in-app chat (/api/assistant, with the user's own token so RLS applies)
@@ -148,7 +148,7 @@ const ACTION_DOCS = [
   "- add_inventory_item: name (required), unit, quantity (number), critical_threshold (number), notes.",
   "- update_inventory_item: id or name (to find it), quantity (set exact number) OR quantity_delta (+/- number, e.g. bought 2 → +2, used one → -1), critical_threshold, new_name, unit.",
   "- delete_inventory_item: id or name.",
-  "- add_task: title (required), description, task_type (priority|time_sensitive), priority_level (1-5), due_date (YYYY-MM-DD), due_time (HH:mm), assignee (member display_name). Recurring: recurrence (weekly|biweekly|monthly|bimonthly|quarterly|semiannual|yearly), recurrence_time (HH:mm); for weekly/biweekly also recurrence_days (0-6 array, 0=Sunday); for the others due_date = the first occurrence (its day of month, and month for yearly, repeats).",
+  "- add_task: title (required), description, task_type (priority|time_sensitive), priority_level (1-5), due_date (YYYY-MM-DD), due_time (HH:mm), assignee (member display_name). Recurring: recurrence (weekly|biweekly|monthly|bimonthly|quarterly|semiannual|yearly), recurrence_time (HH:mm); for weekly/biweekly also recurrence_days (0-6 array, 0=Sunday); for biweekly and up due_date = the start date (\"החל מ...\"; for monthly-based its day of month, and month for yearly, repeats).",
   "- update_task: id or title, then any of: status (todo|in_progress|done), new_title, due_date, due_time, priority_level, assignee (member display_name, or empty string to unassign).",
   "- delete_task: id or title.",
   "- add_event: title (required), date (YYYY-MM-DD, required), time (HH:mm), provider_name, location, notes.",
@@ -341,11 +341,13 @@ export async function executeActions(ctx: ExecContext, actions: AssistantAction[
             : p.is_recurring ? "weekly" : null;
           const time = String(p.recurrence_time ?? p.due_time ?? "09:00");
           const firstDate = String(p.due_date ?? localDate(now, timeZone));
-          const rule: RecurrenceRule | null = !freq ? null : isWeekBased(freq)
-            ? { freq, days: Array.isArray(p.recurrence_days) ? p.recurrence_days.map(Number).filter((d: number) => d >= 0 && d <= 6) : [], time }
-            : { freq, day: Number(firstDate.slice(8, 10)), time };
+          const days = Array.isArray(p.recurrence_days) ? p.recurrence_days.map(Number).filter((d: number) => d >= 0 && d <= 6) : [];
+          const rule: RecurrenceRule | null = !freq ? null
+            : freq === "weekly" ? { freq, days, time }
+            : freq === "biweekly" ? { freq, days, time, start: firstDate }
+            : { freq, day: Number(firstDate.slice(8, 10)), time, start: firstDate };
           const at = rule
-            ? (isWeekBased(rule.freq) ? nextOccurrence(rule, timeZone, now) : zonedToUtc(firstDate, time, timeZone))
+            ? firstOccurrence(rule, timeZone, now)
             : p.due_date ? zonedToUtc(String(p.due_date), p.due_time ? String(p.due_time) : null, timeZone) : null;
           await db("tasks", { method: "POST", body: {
             household_id: householdId, title, description: p.description ? String(p.description) : null,

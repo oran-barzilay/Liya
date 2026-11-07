@@ -25,6 +25,8 @@ export interface WhatsappSettings {
   assistant_enabled: boolean;
   assistant_trigger: string;
   purchase_detection: boolean;
+  shopping_filter: "low" | "at_or_below" | "out";
+  shopping_show_missing: boolean;
 }
 
 export interface WhatsappMessage {
@@ -64,6 +66,8 @@ export const DEFAULT_SETTINGS: Omit<WhatsappSettings, "household_id"> = {
   assistant_enabled: true,
   assistant_trigger: "פאמי",
   purchase_detection: true,
+  shopping_filter: "low",
+  shopping_show_missing: false,
 };
 
 /** Calls the server endpoint as the signed-in user */

@@ -9,7 +9,7 @@ import Fab from "../components/Fab";
 import ReminderPicker from "../components/ReminderPicker";
 import { reminderColumns, reminderFromRow, type ReminderValue } from "../lib/reminders";
 import {
-  FREQUENCIES, FREQUENCY_LABEL, describeRule, isWeekBased, nextOccurrence, parseRule, zonedToUtc,
+  FREQUENCIES, FREQUENCY_LABEL, describeRule, firstOccurrence as ruleFirstOccurrence, isWeekBased, nextOccurrence, parseRule,
   type Frequency, type RecurrenceRule,
 } from "../lib/recurrence";
 import { usePreferencesStore } from "../state/stores/preferencesStore";
@@ -55,27 +55,27 @@ interface RecurrenceState {
   freq: Frequency;
   days: number[];
   time: string;
-  /** First/next date for monthly-based frequencies (its day of month — and month, for yearly — set the schedule) */
+  /** Start date (every 2 weeks and up). Monthly-based: its day of month — and month, for yearly — set the schedule */
   start: string;
 }
 
 function buildRule(r: RecurrenceState): RecurrenceRule {
-  return isWeekBased(r.freq)
-    ? { freq: r.freq, days: r.days, time: r.time }
-    : { freq: r.freq, day: Number(r.start.slice(8, 10)), time: r.time };
+  if (r.freq === "weekly") return { freq: r.freq, days: r.days, time: r.time };
+  if (r.freq === "biweekly") return { freq: r.freq, days: r.days, time: r.time, start: r.start };
+  return { freq: r.freq, day: Number(r.start.slice(8, 10)), time: r.time, start: r.start };
 }
 
 /** When a newly configured recurring task first comes up */
 function firstOccurrence(r: RecurrenceState, timeZone: string): string | null {
-  return isWeekBased(r.freq)
-    ? nextOccurrence(buildRule(r), timeZone, new Date())
-    : zonedToUtc(r.start, r.time, timeZone);
+  return ruleFirstOccurrence(buildRule(r), timeZone);
 }
 
 function RecurrenceField({ value, onChange }: { value: RecurrenceState; onChange: (v: RecurrenceState) => void }) {
   const set = (patch: Partial<RecurrenceState>) => onChange({ ...value, ...patch });
   const toggle = (d: number) => set({ days: value.days.includes(d) ? value.days.filter((x) => x !== d) : [...value.days, d].sort() });
   const monthly = !isWeekBased(value.freq);
+  // Every 2 weeks and up repeat "from a date"
+  const hasStart = value.freq !== "weekly";
   return (
     <div className="space-y-3">
       <div>
@@ -90,10 +90,12 @@ function RecurrenceField({ value, onChange }: { value: RecurrenceState; onChange
           ))}
         </div>
       </div>
-      {monthly ? (
-        <AppCalendar label={value.freq === "yearly" ? "תאריך (היום והחודש חוזרים כל שנה)" : "מועד ראשון (היום בחודש קובע)"}
+      {hasStart && (
+        <AppCalendar
+          label={value.freq === "yearly" ? "החל מתאריך (היום והחודש חוזרים כל שנה)" : monthly ? "החל מתאריך (היום בחודש קובע)" : "החל מתאריך"}
           value={value.start} onChange={(v) => set({ start: v })} mode="date" placeholder="בחר תאריך" />
-      ) : (
+      )}
+      {!monthly && (
         <div>
           <label className="text-xs text-theme-muted block mb-1.5">ימי חזרה</label>
           <div className="flex gap-1.5 flex-wrap">
@@ -111,7 +113,7 @@ function RecurrenceField({ value, onChange }: { value: RecurrenceState; onChange
         <label className="text-xs text-theme-muted block mb-1">שעת ביצוע קבועה</label>
         <input type="time" value={value.time} onChange={(e) => set({ time: e.target.value })} className="input-base text-sm w-32" />
       </div>
-      {(monthly ? value.start : value.days.length > 0) && (
+      {recurrenceReady(value) && (
         <p className="text-xs text-accent-400">{describeRule(buildRule(value), value.start)}</p>
       )}
     </div>
@@ -131,7 +133,8 @@ function recurrenceFromTask(task: Task | null, timeZone: string, today: string):
 }
 
 /** Valid enough to save: weekly needs days, the others a first date */
-const recurrenceReady = (r: RecurrenceState) => (isWeekBased(r.freq) ? r.days.length > 0 : !!r.start);
+const recurrenceReady = (r: RecurrenceState) =>
+  r.freq === "weekly" ? r.days.length > 0 : r.freq === "biweekly" ? r.days.length > 0 && !!r.start : !!r.start;
 
 function AddTaskModal({ onClose, onAdd, members }: {
   onClose: () => void; onAdd: (t: any) => void;
@@ -285,8 +288,8 @@ function EditTaskModal({ task, onClose, onSave, members }: {
           e.preventDefault();
           if (isRecurring && !recurrenceReady(recurrence)) return;
           const recurrenceRule = isRecurring ? JSON.stringify(buildRule(recurrence)) : null;
-          // Monthly-based: the chosen date is the next occurrence
-          const recurringDate = isRecurring && !isWeekBased(recurrence.freq) ? firstOccurrence(recurrence, timeZone) : null;
+          // Every 2 weeks and up: the next occurrence follows the chosen start date
+          const recurringDate = isRecurring && recurrence.freq !== "weekly" ? firstOccurrence(recurrence, timeZone) : null;
           onSave({
             id: task.id, title, status, assigned_to: assignedTo || null,
             priority_level: task.task_type === "priority" ? Number(priority) : task.priority_level,

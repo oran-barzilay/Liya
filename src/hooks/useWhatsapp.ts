@@ -120,9 +120,10 @@ export function useWhatsapp() {
   });
 
   const saveSettings = useMutation({
+    // Write only the changed fields, so a stale screen can never overwrite other settings
+    // (e.g. clearing the group chosen elsewhere); a missing row is created with DB defaults.
     mutationFn: async (patch: Partial<WhatsappSettings>) => {
-      const { household_id: _ignored, last_daily_sent_on: _daily, last_weekly_sent_on: _weekly, ...current } = settings.data ?? { ...DEFAULT_SETTINGS, household_id: hid };
-      const { error } = await supabase.from("whatsapp_settings").upsert({ ...current, ...patch, household_id: hid });
+      const { error } = await supabase.from("whatsapp_settings").upsert({ ...patch, household_id: hid });
       if (error) throw error;
     },
     onMutate: async (patch) => {

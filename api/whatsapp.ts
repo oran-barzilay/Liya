@@ -295,8 +295,12 @@ async function handleWebhook(event: GreenWebhook) {
   const text = event.messageData?.textMessageData?.textMessage ?? event.messageData?.extendedTextMessageData?.text ?? "";
   if (!chatId?.endsWith("@g.us") || !text || !event.idMessage) return "ignored: not a group text";
 
-  const [s] = await db<Settings[]>(`whatsapp_settings?group_id=eq.${encodeURIComponent(chatId)}&enabled=eq.true&select=*`);
-  if (!s || !s.assistant_enabled) return "ignored: not the family group";
+  let [s] = await db<Settings[]>(`whatsapp_settings?group_id=eq.${encodeURIComponent(chatId)}&select=*`);
+  // Same fallback as the scheduler: a household with no group chosen yet uses WHATSAPP_GROUP_ID
+  if (!s && chatId === env("WHATSAPP_GROUP_ID")) [s] = await db<Settings[]>("whatsapp_settings?group_id=is.null&select=*");
+  if (!s) return "ignored: not the family group";
+  if (!s.enabled) return "ignored: messages switched off";
+  if (!s.assistant_enabled) return "ignored: group commands switched off";
   const command = commandText(text, s.assistant_trigger || "פאמי");
   // Without the trigger word, only purchase reports are handled (and only if they touch the stock)
   const purchase = command === null && s.purchase_detection !== false && mentionsPurchase(text);

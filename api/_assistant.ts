@@ -166,6 +166,7 @@ const ACTION_DOCS = [
   "- update_event: id or title, then any of: new_title, date, time, location, provider_name, notes, status (scheduled|completed|cancelled).",
   "- delete_event: id or title.",
   "- shift_task_schedule / shift_event_schedule: id or title, hours_delta, months_delta.",
+  "Match items by meaning, not exact spelling (\"פפסי\" → \"שישית פפסי\", \"חלב\" → \"חלב 3%\"), using the id from Inventory. Convert amounts to the item's own unit (6 bottles of a six-pack item = quantity_delta 1).",
   "Shopping list = inventory items whose quantity is below critical_threshold. \"Bought X\" means update_inventory_item with a positive quantity_delta; if no amount is given, use quantity_delta = max(1, critical_threshold - quantity).",
   "Shopping tasks (module=inventory) close automatically when stock is back above the minimum — prefer updating the inventory item.",
   "Only emit actions when the user clearly asks to change something. For questions, answer from context with no actions.",

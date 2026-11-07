@@ -262,9 +262,28 @@ type GreenWebhook = {
   };
 };
 
+/** Levenshtein distance ≤ 1 (one letter added, missing or wrong) */
+function nearlyEqual(a: string, b: string): boolean {
+  if (a === b) return true;
+  if (Math.abs(a.length - b.length) > 1) return false;
+  let i = 0, j = 0, edits = 0;
+  while (i < a.length && j < b.length) {
+    if (a[i] === b[j]) { i++; j++; continue; }
+    if (++edits > 1) return false;
+    if (a.length > b.length) i++; else if (b.length > a.length) j++; else { i++; j++; }
+  }
+  return edits + (a.length - i) + (b.length - j) <= 1;
+}
+
 /** Text after the trigger word ("פאמי, תוסיף חלב" → "תוסיף חלב"), or null if not addressed to us */
 export function commandText(text: string, trigger: string): string | null {
   const t = text.trim();
+  // Tolerate a one-letter typo in a 4+ letter trigger ("פאני" → "פאמי")
+  const firstWord = t.split(/[\s,:.\-!?]/)[0].replace(/^@/, "").toLowerCase();
+  const tr = trigger.trim().toLowerCase();
+  if (tr.length >= 4 && firstWord !== tr && nearlyEqual(firstWord, tr)) {
+    return t.slice(t.indexOf(firstWord) + firstWord.length).replace(/^[\s,:.\-!?]+/, "").trim();
+  }
   for (const word of [trigger, "fami"].map((w) => w.trim().toLowerCase()).filter(Boolean)) {
     for (const prefix of [word, `@${word}`]) {
       if (!t.toLowerCase().startsWith(prefix)) continue;

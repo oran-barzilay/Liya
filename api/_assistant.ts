@@ -2,7 +2,10 @@
 // Used by the in-app chat (/api/assistant, with the user's own token so RLS applies)
 // and by WhatsApp group commands (/api/whatsapp, with the service role scoped to one household).
 
-export const MODEL_CANDIDATES = ["gemini-3.6-flash", "gemini-2.5-flash", "gemini-2.5-pro"];
+// Tested, fast models in order of preference (gemini-3.6-flash answers in ~2s)
+export const MODEL_CANDIDATES = ["gemini-3.6-flash", "gemini-flash-latest", "gemini-3-flash-preview"];
+// Per-model time limit: the whole request must finish well inside the 25s function limit
+const MODEL_TIMEOUT_MS = 10_000;
 
 type Row = Record<string, any>;
 export type AssistantAction = { type?: string; payload?: Row };
@@ -24,9 +27,18 @@ function rankModel(model: string): number {
   return score;
 }
 
+/**
+ * Default model: the first known-good candidate that is available. Picking "newest by name"
+ * from Google's list is unsafe — listed preview/variant models can hang for over a minute.
+ */
 export function getRecommendedModel(models: string[]): string {
-  return [...models].sort((a, b) => rankModel(b) - rankModel(a))[0] ?? MODEL_CANDIDATES[0];
+  return MODEL_CANDIDATES.find((m) => models.includes(m))
+    ?? [...models].filter(isChatModel).sort((a, b) => rankModel(b) - rankModel(a))[0]
+    ?? MODEL_CANDIDATES[0];
 }
+
+/** Text chat models only — not image / speech / embedding / live variants */
+export const isChatModel = (m: string) => !/image|tts|audio|live|embed|vision|native/.test(m);
 
 const normalizeModelName = (name: string) => (name.startsWith("models/") ? name.slice("models/".length) : name);
 
@@ -44,21 +56,25 @@ export async function fetchAvailableGeminiModels(apiKey: string): Promise<string
 const isTransient = (status: number, detail: string) =>
   status === 429 || status === 503 || /high demand|UNAVAILABLE|temporarily/.test(detail);
 
-async function requestGemini(apiKey: string, body: string, preferredModel: string | null, available: string[]): Promise<Response> {
-  const order = Array.from(new Set(
-    [preferredModel, getRecommendedModel(available.length ? available : MODEL_CANDIDATES), ...available, ...MODEL_CANDIDATES]
-      .filter(Boolean).map((m) => normalizeModelName(m as string))
-  ));
+async function requestGemini(apiKey: string, body: string, preferredModel: string | null): Promise<Response> {
+  // The user's chosen model, then the tested defaults; at most two attempts fit in the time limit
+  const order = Array.from(new Set([preferredModel, ...MODEL_CANDIDATES].filter(Boolean).map((m) => normalizeModelName(m as string)))).slice(0, 2);
   let lastDetail = "No Gemini response";
   for (const model of order) {
-    const res = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(apiKey)}`,
-      { method: "POST", headers: { "Content-Type": "application/json" }, body }
-    );
+    let res: Response;
+    try {
+      res = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(apiKey)}`,
+        { method: "POST", headers: { "Content-Type": "application/json" }, body, signal: AbortSignal.timeout(MODEL_TIMEOUT_MS) }
+      );
+    } catch {
+      lastDetail = `${model}: no answer within ${MODEL_TIMEOUT_MS / 1000}s`;
+      continue; // hanging model → try the next one
+    }
     if (res.ok) return res;
     const detail = await res.text();
-    lastDetail = `${model}: ${detail}`;
-    if (!(res.status === 404 || isTransient(res.status, detail) || /no longer available|is not found|not supported/.test(detail))) break;
+    lastDetail = `${model}: ${detail.slice(0, 200)}`;
+    if (!(res.status === 404 || res.status === 400 || isTransient(res.status, detail) || /no longer available|is not found|not supported/.test(detail))) break;
   }
   throw new Error(lastDetail);
 }
@@ -166,7 +182,7 @@ const ACTION_DOCS = [
   "- update_event: id or title, then any of: new_title, date, time, location, provider_name, notes, status (scheduled|completed|cancelled).",
   "- delete_event: id or title.",
   "- shift_task_schedule / shift_event_schedule: id or title, hours_delta, months_delta.",
-  "Match items by meaning, not exact spelling (\"פפסי\" → \"שישית פפסי\", \"חלב\" → \"חלב 3%\"), using the id from Inventory. Convert amounts to the item's own unit (6 bottles of a six-pack item = quantity_delta 1).",
+  "Match items by meaning, not exact spelling (\"פפסי\" → \"שישית פפסי\", \"חלב\" → \"חלב 3%\"), using the id from Inventory. Use the number the user wrote as-is, in the item's own unit (\"קניתי 6 פפסי\" → quantity_delta 6).",
   "Shopping list = inventory items whose quantity is below critical_threshold. \"Bought X\" means update_inventory_item with a positive quantity_delta; if no amount is given, use quantity_delta = max(1, critical_threshold - quantity).",
   "Shopping tasks (module=inventory) close automatically when stock is back above the minimum — prefer updating the inventory item.",
   "Only emit actions when the user clearly asks to change something. For questions, answer from context with no actions.",
@@ -214,11 +230,11 @@ export async function askAssistant(opts: {
     `Events: ${JSON.stringify(c.appointments.slice(0, 100))}`,
   ].join("\n\n");
 
-  const available = await fetchAvailableGeminiModels(opts.apiKey).catch(() => MODEL_CANDIDATES);
   const res = await requestGemini(opts.apiKey, JSON.stringify({
     contents: [{ role: "user", parts: [{ text: `${system}\n\n${prompt}` }] }],
-    generationConfig: { temperature: 0.2 },
-  }), opts.model ?? null, available);
+    // No extended "thinking": household commands are simple, and thinking took ~11s vs ~2s without it
+    generationConfig: { temperature: 0.2, thinkingConfig: { thinkingBudget: 0 } },
+  }), opts.model ?? null);
   const data = (await res.json()) as { candidates?: { content?: { parts?: { text?: string }[] } }[] };
   const text = data.candidates?.[0]?.content?.parts?.map((x) => x.text ?? "").join("\n") ?? "";
   try {
@@ -328,7 +344,7 @@ export async function executeActions(ctx: ExecContext, actions: AssistantAction[
           await db(`inventory?id=eq.${item.id}`, { method: "PATCH", body: patch });
           inventoryChanged = true;
           lines.push(patch.quantity !== undefined
-            ? `✅ ${patch.name ?? item.name}: ${patch.quantity} ${item.unit}`
+            ? `✅ עדכנתי את ${patch.name ?? item.name}: מ-${Number(item.quantity)} ל-${patch.quantity} ${item.unit}`
             : `✅ עודכן: ${patch.name ?? item.name}`);
           break;
         }

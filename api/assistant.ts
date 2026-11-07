@@ -1,5 +1,5 @@
 import {
-  MODEL_CANDIDATES, askAssistant, executeActions, fetchAvailableGeminiModels, getRecommendedModel, loadContext, makeDb, shoppingListLine,
+  MODEL_CANDIDATES, askAssistant, executeActions, fetchAvailableGeminiModels, getRecommendedModel, isChatModel, loadContext, makeDb, shoppingListLine,
 } from "./_assistant";
 
 export const config = { runtime: "edge" };
@@ -23,7 +23,7 @@ export default async function handler(req: Request): Promise<Response> {
     }
 
     if (req.method === "GET") {
-      const models = await fetchAvailableGeminiModels(apiKey).catch(() => MODEL_CANDIDATES);
+      const models = (await fetchAvailableGeminiModels(apiKey).catch(() => MODEL_CANDIDATES)).filter(isChatModel);
       const defaultModel = getRecommendedModel(models);
       return json({ models, defaultModel, recommendedModel: defaultModel });
     }

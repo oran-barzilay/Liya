@@ -1,8 +1,8 @@
 import {
-  buildDigest, buildReminder, buildWeekly, localDate,
+  buildDigest, buildReminder, buildWeekly, links, localDate,
   type DigestEvent, type DigestSection, type DigestStockItem, type DigestTask, type WeeklySection,
 } from "./_digest";
-import { askAssistant, executeActions, loadContext, makeDb, shoppingListLine } from "./_assistant";
+import { askAssistant, executeActions, loadContext, makeDb, shoppingCompleteLine } from "./_assistant";
 
 export const config = { runtime: "edge" };
 
@@ -60,6 +60,8 @@ type CustomMessage = { id: string; text: string; weekdays: number[]; send_time: 
 const env = (name: string) => process.env[name]?.trim() || undefined;
 const json = (body: unknown, status = 200) => Response.json(body, { status });
 const supabaseUrl = () => env("SUPABASE_URL") ?? env("VITE_SUPABASE_URL");
+/** The app's public address, for tap-to-open links in messages */
+const siteUrl = () => (env("SITE_URL") ?? env("VITE_SITE_URL"))?.replace(/\/$/, "") || null;
 
 /** PostgREST call with the service-role key (server only) */
 async function db<T = unknown>(path: string, init: { method?: string; body?: unknown; returning?: boolean } = {}): Promise<T> {
@@ -127,12 +129,12 @@ async function buildSummary(kind: "daily" | "weekly", s: Settings, now: Date, ov
   const from = new Date(now.getTime() - 86_400_000).toISOString();
   const to = new Date(now.getTime() + (kind === "weekly" ? 9 : 3) * 86_400_000).toISOString();
   const [tasks, events, inventory, users] = await Promise.all([
-    db<DigestTask[]>(`tasks?${h}&status=in.(todo,in_progress)&select=title,status,module,due_at,scheduled_start_at,assigned_to`),
+    db<DigestTask[]>(`tasks?${h}&status=in.(todo,in_progress)&select=id,title,status,module,due_at,scheduled_start_at,assigned_to`),
     db<DigestEvent[]>(`appointments?${h}&starts_at=gte.${from}&starts_at=lt.${to}&select=title,starts_at,location,provider_name,status`),
-    db<DigestStockItem[]>(`inventory?${h}&select=name,quantity,critical_threshold,unit`),
+    db<DigestStockItem[]>(`inventory?${h}&select=id,name,quantity,critical_threshold,unit`),
     db<{ id: string; display_name: string }[]>(`users?${h}&select=id,display_name`),
   ]);
-  const base = { now, timeZone: s.time_zone, tasks, events, inventory, members: Object.fromEntries(users.map((u) => [u.id, u.display_name])) };
+  const base = { now, timeZone: s.time_zone, tasks, events, inventory, site: siteUrl(), members: Object.fromEntries(users.map((u) => [u.id, u.display_name])) };
   return kind === "weekly"
     ? buildWeekly({ ...base, sections: overrides.sections ?? s.weekly_sections, greeting: overrides.greeting !== undefined ? overrides.greeting : s.weekly_greeting })
     : buildDigest({ ...base, sections: overrides.sections ?? s.sections, greeting: overrides.greeting !== undefined ? overrides.greeting : s.greeting });
@@ -214,6 +216,7 @@ async function tick(now: Date) {
       if (!claimed.length) continue;
       await send(s.household_id, groupId, "reminder", buildReminder({
         kind: "task", title: t.title, at: t.scheduled_start_at ?? t.due_at, who: t.assigned_to ? names[t.assigned_to] : null,
+        link: siteUrl() ? links.task(siteUrl()!, t.id) : null,
       }, s.time_zone));
       sent.push(`task:${t.id}`);
     }
@@ -345,7 +348,11 @@ async function handleWebhook(event: GreenWebhook) {
   if (!apiKey) return "ignored: no GOOGLE_AI_API_KEY";
 
   const serviceDb = makeDb(supabaseUrl()!, env("SUPABASE_SERVICE_ROLE_KEY")!, env("SUPABASE_SERVICE_ROLE_KEY")!);
-  const context = await loadContext(serviceDb, s.household_id);
+  const [context, [familySettings]] = await Promise.all([
+    loadContext(serviceDb, s.household_id),
+    // The family's chosen model (Settings / WhatsApp screen); falls back automatically if it doesn't answer
+    serviceDb<{ assistant_model: string | null }[]>(`household_settings?household_id=eq.${s.household_id}&select=assistant_model`).catch(() => []),
+  ]);
   // Changes need an author; attribute them to the sender if the name matches a member, else the owner
   const actor = context.members.find((m) => senderName && String(m.display_name).trim() === senderName.trim())
     ?? context.members.find((m) => m.role === "owner") ?? context.members[0];
@@ -355,18 +362,20 @@ async function handleWebhook(event: GreenWebhook) {
   try {
     const answer = await askAssistant({
       apiKey, message: command ?? text, context, timeZone: s.time_zone, sender: senderName, channel: "whatsapp",
+      model: familySettings?.assistant_model || null,
       mode: purchase ? "purchase" : "command",
     });
     // A purchase report may only update stock, never add/delete/edit anything else
     const actions = purchase ? answer.actions.filter((a) => a.type === "update_inventory_item") : answer.actions;
     const { lines, inventoryChanged } = await executeActions(
-      { db: serviceDb, householdId: s.household_id, actorId: actor.id, timeZone: s.time_zone, context }, actions);
+      { db: serviceDb, householdId: s.household_id, actorId: actor.id, timeZone: s.time_zone, context, site: siteUrl() }, actions);
     // Stay silent when a casual "קניתי…" wasn't about anything we track
     if (purchase && !inventoryChanged) return "ignored: purchase not in stock";
     reply = [
       answer.reply,
       ...(purchase ? lines.filter((l) => !l.startsWith("⚠️")) : lines),
-      inventoryChanged ? await shoppingListLine(serviceDb, s.household_id) : "",
+      // The full list only on request ("מה צריך לקנות?"); after an update just celebrate an empty list
+      inventoryChanged ? await shoppingCompleteLine(serviceDb, s.household_id) : "",
     ].filter(Boolean).join("\n");
   } catch (e) {
     if (purchase) return "ignored: purchase error";

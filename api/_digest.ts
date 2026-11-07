@@ -2,6 +2,7 @@
 // Files starting with "_" in api/ are not deployed as endpoints by Vercel.
 
 export interface DigestTask {
+  id?: string;
   title: string;
   status: string;
   module: string;
@@ -17,6 +18,7 @@ export interface DigestEvent {
   status: string;
 }
 export interface DigestStockItem {
+  id?: string;
   name: string;
   quantity: number | string;
   critical_threshold: number | string;
@@ -36,6 +38,25 @@ export interface DigestInput {
   events: DigestEvent[];
   inventory: DigestStockItem[];
   members: Record<string, string>; // user id → display name
+  /** App address; when set, tasks get a tap-to-open link and long lists are trimmed */
+  site?: string | null;
+}
+
+/** Lists in WhatsApp show at most this many items, then a link to the full list */
+export const LIST_LIMIT = 5;
+
+/** Deep links into the app (see the /t and /b routes in src/App.tsx) */
+export const links = {
+  task: (site: string, id: string) => `${site}/t/${id}`,
+  buy: (site: string, itemId: string) => `${site}/b/${itemId}`,
+  tasks: (site: string) => `${site}/tasks`,
+  shopping: (site: string) => `${site}/tasks?scope=shopping`,
+};
+
+/** First LIST_LIMIT lines, then "ועוד N" with a link to the full list */
+function capped(lines: string[], moreLink: string | null): string[] {
+  if (!moreLink || lines.length <= LIST_LIMIT) return lines;
+  return [...lines.slice(0, LIST_LIMIT), `ועוד ${lines.length - LIST_LIMIT} — הרשימה המלאה:`, moreLink];
 }
 
 /** YYYY-MM-DD of an instant in the given time zone */
@@ -63,11 +84,20 @@ const weekdayName = (iso: string) =>
 /** Shared building blocks for the daily and weekly summaries */
 function prepare(input: Omit<DigestInput, "sections" | "greeting">) {
   const { timeZone, members } = input;
+  const site = input.site || null;
   const today = localDate(input.now, timeZone);
   const tasks = input.tasks.filter((t) => OPEN(t) && EVERYDAY(t) && when(t));
   const events = input.events.filter((e) => e.status !== "cancelled");
+  const taskLine = (t: DigestTask) => {
+    // Date-only tasks are stored at local midnight: no time prefix
+    const time = t.scheduled_start_at && hhmm(t.scheduled_start_at, timeZone) !== "00:00" ? `${hhmm(t.scheduled_start_at, timeZone)} ` : "";
+    const who = t.assigned_to && members[t.assigned_to] ? ` — ${members[t.assigned_to]}` : "";
+    return `• ${time}${t.title}${who}${site && t.id ? `\n   ${links.task(site, t.id)}` : ""}`;
+  };
+  const shoppingItems = input.inventory.filter((i) => Number(i.quantity) < Number(i.critical_threshold));
   return {
     today,
+    site,
     tasksOn: (day: string) => tasks
       .filter((t) => localDate(when(t)!, timeZone) === day)
       .sort((a, b) => when(a)!.localeCompare(when(b)!)),
@@ -77,24 +107,26 @@ function prepare(input: Omit<DigestInput, "sections" | "greeting">) {
     overdue: tasks
       .filter((t) => localDate(when(t)!, timeZone) < today)
       .sort((a, b) => when(a)!.localeCompare(when(b)!)),
-    shopping: input.inventory
-      .filter((i) => Number(i.quantity) < Number(i.critical_threshold))
-      .map((i) => i.name),
-    taskLine: (t: DigestTask) => {
-      // Date-only tasks are stored at local midnight: no time prefix
-      const time = t.scheduled_start_at && hhmm(t.scheduled_start_at, timeZone) !== "00:00" ? `${hhmm(t.scheduled_start_at, timeZone)} ` : "";
-      const who = t.assigned_to && members[t.assigned_to] ? ` — ${members[t.assigned_to]}` : "";
-      return `• ${time}${t.title}${who}`;
-    },
+    shopping: shoppingItems.map((i) => i.name),
+    taskLine,
     eventLine: (e: DigestEvent) => {
       const extra = [e.provider_name, e.location].filter(Boolean).join(", ");
       return `• ${hhmm(e.starts_at, timeZone)} ${e.title}${extra ? ` (${extra})` : ""}`;
     },
-    overdueSection: (list: DigestTask[], fmt: (t: DigestTask) => string, max = 8) =>
-      ["⚠️ *באיחור*", ...list.slice(0, max).map((t) => `${fmt(t)} (מ-${ddmm(localDate(when(t)!, timeZone))})`),
-        ...(list.length > max ? [`ועוד ${list.length - max}...`] : [])].join("\n"),
+    /** A task section: header + (capped) task lines */
+    taskSection: (header: string, list: DigestTask[], suffix?: (t: DigestTask) => string) =>
+      [header, ...capped(list.map((t) => suffix ? taskLine(t).replace(/^(• [^\n]*)/, `$1${suffix(t)}`) : taskLine(t)),
+        site ? links.tasks(site) : null)].join("\n"),
+    /** Compact shopping section: names (capped) + link to the full list */
+    shoppingSection: () => {
+      const names = shoppingItems.map((i) => i.name);
+      if (!site || names.length <= LIST_LIMIT) return `🛒 *לקנות*\n${names.join(", ")}`;
+      return `🛒 *לקנות*\n${names.slice(0, LIST_LIMIT).join(", ")} ועוד ${names.length - LIST_LIMIT}\nהרשימה המלאה: ${links.shopping(site)}`;
+    },
   };
 }
+
+const sinceSuffix = (timeZone: string) => (t: DigestTask) => ` (מ-${ddmm(localDate(when(t)!, timeZone))})`;
 
 export function buildDigest(input: DigestInput): string {
   const { now, timeZone } = input;
@@ -106,9 +138,9 @@ export function buildDigest(input: DigestInput): string {
   const todayEvents = p.eventsOn(p.today);
   const todayTasks = p.tasksOn(p.today);
   if (on("events") && todayEvents.length) sections.push(["📅 *אירועים היום*", ...todayEvents.map(p.eventLine)].join("\n"));
-  if (on("today") && todayTasks.length) sections.push(["✅ *משימות להיום*", ...todayTasks.map(p.taskLine)].join("\n"));
-  if (on("overdue") && p.overdue.length) sections.push(p.overdueSection(p.overdue, p.taskLine));
-  if (on("shopping") && p.shopping.length) sections.push(`🛒 *לקנות*\n${p.shopping.join(", ")}`);
+  if (on("today") && todayTasks.length) sections.push(p.taskSection("✅ *משימות להיום*", todayTasks));
+  if (on("overdue") && p.overdue.length) sections.push(p.taskSection("⚠️ *באיחור*", p.overdue, sinceSuffix(timeZone)));
+  if (on("shopping") && p.shopping.length) sections.push(p.shoppingSection());
 
   const tomorrowLines = [...p.eventsOn(tomorrow).map(p.eventLine), ...p.tasksOn(tomorrow).map(p.taskLine)];
   if (on("tomorrow") && tomorrowLines.length) sections.push([`🔜 *מחר (${weekdayName(tomorrow)})*`, ...tomorrowLines].join("\n"));
@@ -145,15 +177,15 @@ export function buildWeekly(input: WeeklyInput): string {
 
   const sections: string[] = [];
   if (on("events") || on("tasks")) sections.push(dayBlocks.length ? dayBlocks.join("\n\n") : "השבוע פנוי — אין אירועים או משימות מתוכננים 🌴");
-  if (on("overdue") && p.overdue.length) sections.push(p.overdueSection(p.overdue, p.taskLine, 5));
-  if (on("shopping") && p.shopping.length) sections.push(`🛒 *לקנות*\n${p.shopping.join(", ")}`);
+  if (on("overdue") && p.overdue.length) sections.push(p.taskSection("⚠️ *באיחור*", p.overdue, sinceSuffix(input.timeZone)));
+  if (on("shopping") && p.shopping.length) sections.push(p.shoppingSection());
 
   const header = `🗓️ *${input.greeting?.trim() || "השבוע הקרוב"} · ${ddmm(days[0])}–${ddmm(days[6])}*`;
   return [header, ...sections].join("\n\n");
 }
 
 /** A dedicated reminder for one task or event */
-export function buildReminder(item: { title: string; at: string | null; kind: "task" | "event"; location?: string | null; who?: string | null }, timeZone: string): string {
+export function buildReminder(item: { title: string; at: string | null; kind: "task" | "event"; location?: string | null; who?: string | null; link?: string | null }, timeZone: string): string {
   // Date-only tasks are stored at local midnight: show just the day
   const time = item.at ? hhmm(item.at, timeZone) : null;
   const day = item.at ? localDate(item.at, timeZone) : null;
@@ -165,6 +197,30 @@ export function buildReminder(item: { title: string; at: string | null; kind: "t
     when ? `${item.kind === "event" ? "📅" : "🗓️"} ${when}` : null,
     item.location ? `📍 ${item.location}` : null,
     item.who ? `👤 ${item.who}` : null,
+    item.link ? `לסימון / עדכון: ${item.link}` : null,
   ];
   return lines.filter(Boolean).join("\n");
+}
+
+/** "What do we need to buy?" — each item links to its "how much did you buy?" sheet */
+export function renderShoppingList(inventory: DigestStockItem[], site: string | null): string {
+  const items = inventory.filter((i) => Number(i.quantity) < Number(i.critical_threshold));
+  if (!items.length) return "🎉 רשימת הקניות ריקה — יש הכל בבית";
+  const lines = items.map((i) => {
+    const need = Number(i.critical_threshold) - Number(i.quantity);
+    return `• ${i.name} (חסר ${need} ${i.unit})${site && i.id ? `\n   ${links.buy(site, i.id)}` : ""}`;
+  });
+  return ["🛒 *רשימת הקניות*", ...capped(lines, site ? links.shopping(site) : null)].join("\n");
+}
+
+/** "Which tasks…?" — each task links to its page in the app */
+export function renderTaskList(title: string, tasks: DigestTask[], members: Record<string, string>, timeZone: string, site: string | null): string {
+  if (!tasks.length) return `${title}\nאין משימות 🎉`;
+  const p = prepare({ now: new Date(), timeZone, tasks: [], events: [], inventory: [], members, site });
+  const lines = tasks.map((t) => {
+    const at = when(t);
+    const date = at && localDate(at, timeZone) !== p.today ? ` (${ddmm(localDate(at, timeZone))})` : "";
+    return p.taskLine(t).replace(/^(• [^\n]*)/, `$1${date}`);
+  });
+  return [title, ...capped(lines, site ? links.tasks(site) : null)].join("\n");
 }

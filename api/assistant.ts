@@ -1,5 +1,5 @@
 import {
-  MODEL_CANDIDATES, askAssistant, executeActions, fetchAvailableGeminiModels, getRecommendedModel, isChatModel, loadContext, makeDb, shoppingListLine,
+  MODEL_CANDIDATES, askAssistant, executeActions, fetchAvailableGeminiModels, getRecommendedModel, isChatModel, loadContext, makeDb, shoppingCompleteLine,
 } from "./_assistant";
 
 export const config = { runtime: "edge" };
@@ -53,7 +53,8 @@ export default async function handler(req: Request): Promise<Response> {
       apiKey, message, context, timeZone, model: body.model || null, sender: me.display_name, channel: "app",
     });
     const { lines, inventoryChanged } = await executeActions({ db, householdId: me.household_id, actorId: user.id, timeZone, context }, actions);
-    const results = inventoryChanged ? [...lines, await shoppingListLine(db, me.household_id)] : lines;
+    const done = inventoryChanged ? await shoppingCompleteLine(db, me.household_id) : "";
+    const results = done ? [...lines, done] : lines;
     return json({ reply, actions, results });
   } catch (error) {
     const detail = error instanceof Error ? error.message : "Unknown server error";

@@ -1,5 +1,5 @@
-import { useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useEffect, useMemo, useState } from "react";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import { useTasks } from "../hooks/useTasks";
 import { useInventory } from "../hooks/useInventory";
@@ -8,6 +8,10 @@ import AppCalendar from "../components/AppCalendar";
 import Fab from "../components/Fab";
 import ReminderPicker from "../components/ReminderPicker";
 import { reminderColumns, reminderFromRow, type ReminderValue } from "../lib/reminders";
+import {
+  FREQUENCIES, FREQUENCY_LABEL, describeRule, isWeekBased, nextOccurrence, parseRule, zonedToUtc,
+  type Frequency, type RecurrenceRule,
+} from "../lib/recurrence";
 import { usePreferencesStore } from "../state/stores/preferencesStore";
 import { getTodayInTimeZone, utcIsoToDateInput, zonedDateTimeToUtcIso } from "../lib/datetime";
 
@@ -47,52 +51,87 @@ function relativeDateLabel(iso: string, today: string): { text: string; cls: str
   return { text: new Date(d + "T12:00:00").toLocaleDateString("he-IL", { day: "numeric", month: "numeric" }), cls: "text-theme-muted" };
 }
 
-function getNextOccurrence(recurrenceRule: string | null): string | null {
-  if (!recurrenceRule) return null;
-  try {
-    const rule = JSON.parse(recurrenceRule);
-    const days: number[] = rule.days ?? [];
-    const time: string = rule.time ?? "09:00";
-    if (!days.length) return null;
-    const now = new Date();
-    for (let i = 1; i <= 7; i++) {
-      const next = new Date(now);
-      next.setDate(next.getDate() + i);
-      if (days.includes(next.getDay())) {
-        const [h, m] = time.split(":").map(Number);
-        next.setHours(h, m, 0, 0);
-        return next.toISOString().slice(0, 16);
-      }
-    }
-  } catch {}
-  return null;
+interface RecurrenceState {
+  freq: Frequency;
+  days: number[];
+  time: string;
+  /** First/next date for monthly-based frequencies (its day of month — and month, for yearly — set the schedule) */
+  start: string;
 }
 
-function RecurrenceField({ days, setDays, time, setTime }: {
-  days: number[]; setDays: (d: number[]) => void; time: string; setTime: (t: string) => void;
-}) {
-  const toggle = (d: number) => setDays(days.includes(d) ? days.filter((x) => x !== d) : [...days, d].sort());
+function buildRule(r: RecurrenceState): RecurrenceRule {
+  return isWeekBased(r.freq)
+    ? { freq: r.freq, days: r.days, time: r.time }
+    : { freq: r.freq, day: Number(r.start.slice(8, 10)), time: r.time };
+}
+
+/** When a newly configured recurring task first comes up */
+function firstOccurrence(r: RecurrenceState, timeZone: string): string | null {
+  return isWeekBased(r.freq)
+    ? nextOccurrence(buildRule(r), timeZone, new Date())
+    : zonedToUtc(r.start, r.time, timeZone);
+}
+
+function RecurrenceField({ value, onChange }: { value: RecurrenceState; onChange: (v: RecurrenceState) => void }) {
+  const set = (patch: Partial<RecurrenceState>) => onChange({ ...value, ...patch });
+  const toggle = (d: number) => set({ days: value.days.includes(d) ? value.days.filter((x) => x !== d) : [...value.days, d].sort() });
+  const monthly = !isWeekBased(value.freq);
   return (
     <div className="space-y-3">
       <div>
-        <label className="text-xs text-theme-muted block mb-1.5">ימי חזרה</label>
-        <div className="flex gap-1.5 flex-wrap">
-          {DAY_LABELS.map((lbl, idx) => (
-            <button key={idx} type="button" onClick={() => toggle(idx)}
-              className={"w-10 h-10 sm:w-9 sm:h-9 rounded-lg text-sm sm:text-xs font-semibold border transition-colors " +
-                (days.includes(idx) ? "bg-accent-600 border-accent-600 text-white" : "border-slate-700 text-theme-muted hover:border-accent-500 hover:text-theme")}>
-              {lbl}
+        <label className="text-xs text-theme-muted block mb-1.5">תדירות</label>
+        <div className="grid grid-cols-4 gap-1.5">
+          {FREQUENCIES.map((f) => (
+            <button key={f} type="button" onClick={() => set({ freq: f })}
+              className={"py-2 rounded-lg text-xs font-medium border transition-colors " +
+                (value.freq === f ? "bg-accent-600 border-accent-600 text-white" : "border-slate-700 text-theme-muted hover:text-theme")}>
+              {FREQUENCY_LABEL[f]}
             </button>
           ))}
         </div>
       </div>
+      {monthly ? (
+        <AppCalendar label={value.freq === "yearly" ? "תאריך (היום והחודש חוזרים כל שנה)" : "מועד ראשון (היום בחודש קובע)"}
+          value={value.start} onChange={(v) => set({ start: v })} mode="date" placeholder="בחר תאריך" />
+      ) : (
+        <div>
+          <label className="text-xs text-theme-muted block mb-1.5">ימי חזרה</label>
+          <div className="flex gap-1.5 flex-wrap">
+            {DAY_LABELS.map((lbl, idx) => (
+              <button key={idx} type="button" onClick={() => toggle(idx)}
+                className={"w-10 h-10 sm:w-9 sm:h-9 rounded-lg text-sm sm:text-xs font-semibold border transition-colors " +
+                  (value.days.includes(idx) ? "bg-accent-600 border-accent-600 text-white" : "border-slate-700 text-theme-muted hover:border-accent-500 hover:text-theme")}>
+                {lbl}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
       <div>
         <label className="text-xs text-theme-muted block mb-1">שעת ביצוע קבועה</label>
-        <input type="time" value={time} onChange={(e) => setTime(e.target.value)} className="input-base text-sm w-32" />
+        <input type="time" value={value.time} onChange={(e) => set({ time: e.target.value })} className="input-base text-sm w-32" />
       </div>
+      {(monthly ? value.start : value.days.length > 0) && (
+        <p className="text-xs text-accent-400">{describeRule(buildRule(value), value.start)}</p>
+      )}
     </div>
   );
 }
+
+/** Recurrence settings of an existing task (or defaults) */
+function recurrenceFromTask(task: Task | null, timeZone: string, today: string): RecurrenceState {
+  const rule = parseRule(task?.recurrence_rule);
+  const current = task?.scheduled_start_at ?? task?.due_at;
+  return {
+    freq: rule?.freq ?? "weekly",
+    days: rule?.days ?? [],
+    time: rule?.time ?? "09:00",
+    start: current ? utcIsoToDateInput(current, timeZone) : today,
+  };
+}
+
+/** Valid enough to save: weekly needs days, the others a first date */
+const recurrenceReady = (r: RecurrenceState) => (isWeekBased(r.freq) ? r.days.length > 0 : !!r.start);
 
 function AddTaskModal({ onClose, onAdd, members }: {
   onClose: () => void; onAdd: (t: any) => void;
@@ -107,8 +146,7 @@ function AddTaskModal({ onClose, onAdd, members }: {
   const [desc, setDesc] = useState("");
   const [assignedTo, setAssignedTo] = useState("");
   const [isRecurring, setIsRecurring] = useState(false);
-  const [recurDays, setRecurDays] = useState<number[]>([]);
-  const [recurTime, setRecurTime] = useState("09:00");
+  const [recurrence, setRecurrence] = useState<RecurrenceState>(() => recurrenceFromTask(null, timeZone, getTodayInTimeZone(timeZone)));
   const [reminder, setReminder] = useState<ReminderValue>({ preset: "none", custom: "" });
   const itemIso = toUtcIso(taskType === "priority" ? dueAt : scheduledStart, timeZone);
 
@@ -117,8 +155,9 @@ function AddTaskModal({ onClose, onAdd, members }: {
       <form
         onSubmit={(e) => {
           e.preventDefault();
-          const recurrenceRule = isRecurring ? JSON.stringify({ days: recurDays, time: recurTime }) : null;
-          const nextOccurrence = recurrenceRule ? getNextOccurrence(recurrenceRule) : null;
+          if (isRecurring && !recurrenceReady(recurrence)) return;
+          const recurrenceRule = isRecurring ? JSON.stringify(buildRule(recurrence)) : null;
+          const nextOccurrence = isRecurring ? firstOccurrence(recurrence, timeZone) : null;
           onAdd({
             title, task_type: taskType, status: "todo", module: "general", source_type: "manual",
             priority_level: taskType === "priority" ? Number(priority) : null,
@@ -157,7 +196,7 @@ function AddTaskModal({ onClose, onAdd, members }: {
               className={"rounded-xl border px-3 py-2.5 text-sm transition-colors text-right " +
                 (isRecurring ? "bg-accent-700 border-accent-600 text-white" : "border-slate-700 text-theme-muted hover:text-theme hover:border-slate-600")}>
               <div className="font-medium">חזרתית</div>
-              <div className="text-[11px] opacity-70">חוזרת כל שבוע</div>
+              <div className="text-[11px] opacity-70">שבועית, חודשית, שנתית…</div>
             </button>
           </div>
         </div>
@@ -204,7 +243,7 @@ function AddTaskModal({ onClose, onAdd, members }: {
         {/* Recurrence config */}
         {isRecurring && (
           <div className="bg-slate-950/60 border border-slate-700 rounded-xl p-3">
-            <RecurrenceField days={recurDays} setDays={setRecurDays} time={recurTime} setTime={setRecurTime} />
+            <RecurrenceField value={recurrence} onChange={setRecurrence} />
           </div>
         )}
 
@@ -235,12 +274,7 @@ function EditTaskModal({ task, onClose, onSave, members }: {
   const [assignedTo, setAssignedTo] = useState(task.assigned_to ?? "");
   const [status, setStatus] = useState(task.status ?? "todo");
   const [isRecurring, setIsRecurring] = useState(task.is_recurring ?? false);
-  const [recurDays, setRecurDays] = useState<number[]>(() => {
-    try { return JSON.parse(task.recurrence_rule ?? "{}").days ?? []; } catch { return []; }
-  });
-  const [recurTime, setRecurTime] = useState(() => {
-    try { return JSON.parse(task.recurrence_rule ?? "{}").time ?? "09:00"; } catch { return "09:00"; }
-  });
+  const [recurrence, setRecurrence] = useState<RecurrenceState>(() => recurrenceFromTask(task, timeZone, getTodayInTimeZone(timeZone)));
   const [reminder, setReminder] = useState<ReminderValue>(() => reminderFromRow(task, timeZone));
   const itemIso = toUtcIso(task.task_type === "priority" ? dueAt : scheduledStart, timeZone);
 
@@ -249,12 +283,15 @@ function EditTaskModal({ task, onClose, onSave, members }: {
       <form
         onSubmit={(e) => {
           e.preventDefault();
-          const recurrenceRule = isRecurring ? JSON.stringify({ days: recurDays, time: recurTime }) : null;
+          if (isRecurring && !recurrenceReady(recurrence)) return;
+          const recurrenceRule = isRecurring ? JSON.stringify(buildRule(recurrence)) : null;
+          // Monthly-based: the chosen date is the next occurrence
+          const recurringDate = isRecurring && !isWeekBased(recurrence.freq) ? firstOccurrence(recurrence, timeZone) : null;
           onSave({
             id: task.id, title, status, assigned_to: assignedTo || null,
             priority_level: task.task_type === "priority" ? Number(priority) : task.priority_level,
-            due_at: toUtcIso(dueAt, timeZone),
-            scheduled_start_at: toUtcIso(scheduledStart, timeZone),
+            due_at: recurringDate && task.task_type === "priority" ? recurringDate : toUtcIso(dueAt, timeZone),
+            scheduled_start_at: recurringDate && task.task_type === "time_sensitive" ? recurringDate : toUtcIso(scheduledStart, timeZone),
             description: desc || null, is_recurring: isRecurring, recurrence_rule: recurrenceRule,
             ...(isRecurring ? {} : reminderColumns(reminder, itemIso, timeZone, task.whatsapp_remind_at)),
           });
@@ -306,7 +343,7 @@ function EditTaskModal({ task, onClose, onSave, members }: {
         {!isRecurring && <ReminderPicker value={reminder} onChange={setReminder} itemIso={itemIso} timeZone={timeZone} />}
         {isRecurring && (
           <div className="bg-slate-950/60 border border-slate-700 rounded-xl p-3">
-            <RecurrenceField days={recurDays} setDays={setRecurDays} time={recurTime} setTime={setRecurTime} />
+            <RecurrenceField value={recurrence} onChange={setRecurrence} />
           </div>
         )}
         <div>
@@ -385,13 +422,38 @@ export default function Tasks() {
   const [showModal, setShowModal] = useState(false);
   const [pendingDelete, setPendingDelete] = useState<string | null>(null);
   const [editingTask, setEditingTask] = useState<Task | null>(null);
-  const [taskScope, setTaskScope] = useState<TaskScope>("daily");
+  const [params, setParams] = useSearchParams();
+  const [taskScope, setTaskScope] = useState<TaskScope>(() => (params.get("scope") === "shopping" ? "shopping" : "daily"));
   const [filterType, setFilterType] = useState<"all" | "priority" | "time_sensitive">("all");
   const [filterAssignee, setFilterAssignee] = useState<string>("all");
   const [recurrenceFilter, setRecurrenceFilter] = useState<"all" | "recurring" | "one_time">("all");
   const [showDone, setShowDone] = useState(false);
 
   const isShoppingTask = (task: Task) => task.module === "inventory" || task.source_type === "inventory_threshold";
+
+  // Links from WhatsApp: ?open=<taskId> opens that task (shopping → "how much did you buy?"),
+  // ?buy=<itemId> opens the buy sheet for a shopping item. Handled once, when the data is loaded.
+  useEffect(() => {
+    const openId = params.get("open");
+    const buyId = params.get("buy");
+    if (!openId && !buyId) return;
+    if (openId) {
+      const task = tasks.find((t) => t.id === openId);
+      if (!task) return; // wait for tasks to load
+      const item = isShoppingTask(task) && task.status !== "done" ? itemFor(task) : undefined;
+      if (item) setBuying(item);
+      else setEditingTask(task);
+      if (isShoppingTask(task)) setTaskScope("shopping");
+    } else if (buyId) {
+      const item = inventory.find((i) => i.id === buyId);
+      if (!item) return; // wait for inventory to load
+      setBuying(item);
+    }
+    const next = new URLSearchParams(params);
+    next.delete("open");
+    next.delete("buy");
+    setParams(next, { replace: true });
+  }, [params, tasks, inventory]);
   const shoppingTasks = useMemo(() => tasks.filter(isShoppingTask), [tasks]);
   const everydayTasks = useMemo(() => tasks.filter((task) => !isShoppingTask(task)), [tasks]);
   const sourceTasks = taskScope === "daily" ? everydayTasks : taskScope === "shopping" ? shoppingTasks : tasks;
@@ -418,22 +480,26 @@ export default function Tasks() {
   const openShoppingCount = shoppingTasks.filter((t) => t.status !== "done" && t.status !== "cancelled").length;
   const scopeTitle = taskScope === "daily" ? "משימות הבית" : taskScope === "shopping" ? "קניות וחוסרים" : "כל המשימות";
 
+  /** A recurring task was completed: create its next occurrence */
+  const spawnNext = (task: Task) => {
+    const rule = parseRule(task.recurrence_rule);
+    if (!task.is_recurring || !rule) return;
+    const nextDate = nextOccurrence(rule, timeZone, new Date(), task.scheduled_start_at ?? task.due_at);
+    if (!nextDate) return;
+    createTask.mutate({
+      title: task.title, description: task.description,
+      task_type: task.task_type, module: task.module, source_type: "recurring",
+      priority_level: task.priority_level,
+      scheduled_start_at: task.task_type === "time_sensitive" ? nextDate : null,
+      due_at: task.task_type === "priority" ? nextDate : null,
+      is_recurring: true, recurrence_rule: task.recurrence_rule,
+      assigned_to: task.assigned_to, status: "todo",
+    });
+  };
+
   const handleStatusChange = (id: string, status: string, task?: Task) => {
     updateTask.mutate({ id, status });
-    if (status === "done" && task?.is_recurring && task?.recurrence_rule) {
-      const nextDate = getNextOccurrence(task.recurrence_rule);
-      if (nextDate) {
-        createTask.mutate({
-          title: task.title, description: task.description,
-          task_type: task.task_type, module: task.module, source_type: "recurring",
-          priority_level: task.priority_level,
-          scheduled_start_at: task.task_type === "time_sensitive" ? nextDate : null,
-          due_at: task.task_type === "priority" ? nextDate : null,
-          is_recurring: true, recurrence_rule: task.recurrence_rule,
-          assigned_to: task.assigned_to, status: "todo",
-        });
-      }
-    }
+    if (status === "done" && task) spawnNext(task);
   };
 
   const TaskRow = ({ task }: { task: Task }) => {
@@ -480,6 +546,10 @@ export default function Tasks() {
         <button type="button" onClick={() => setEditingTask(task)} className="flex-1 min-w-0 text-right py-1.5">
           <div className="flex items-center gap-1.5 flex-wrap">
             {task.is_recurring && <Icon name="repeat" className="w-3 h-3 text-accent-400 shrink-0" />}
+            {task.is_recurring && (() => {
+              const freq = parseRule(task.recurrence_rule)?.freq;
+              return freq && freq !== "weekly" && <span className="text-[11px] text-accent-400 shrink-0">{FREQUENCY_LABEL[freq]}</span>;
+            })()}
             {task.whatsapp_remind_at && !task.whatsapp_reminded_at && !isDone && (
               <Icon name="chat" className="w-3 h-3 text-accent-400 shrink-0" title="תזכורת בוואטסאפ" />
             )}
@@ -636,7 +706,12 @@ export default function Tasks() {
 
       {/* Modals */}
       {showModal && <AddTaskModal onClose={() => setShowModal(false)} onAdd={(task) => createTask.mutate(task)} members={members as Array<{ id: string; display_name: string }>} />}
-      {editingTask && <EditTaskModal task={editingTask} onClose={() => setEditingTask(null)} onSave={(t) => updateTask.mutate(t)} members={members as Array<{ id: string; display_name: string }>} />}
+      {editingTask && <EditTaskModal task={editingTask} onClose={() => setEditingTask(null)}
+        onSave={(t) => {
+          updateTask.mutate(t);
+          // Marked done from the edit sheet (e.g. opened from a WhatsApp link) → next occurrence too
+          if (t.status === "done" && editingTask.status !== "done") spawnNext({ ...editingTask, ...t });
+        }} members={members as Array<{ id: string; display_name: string }>} />}
       {buying && (
         <BoughtSheet item={buying} onClose={() => setBuying(null)}
           onConfirm={(bought) => {

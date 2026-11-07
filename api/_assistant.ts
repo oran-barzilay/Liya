@@ -1,3 +1,6 @@
+import { renderShoppingList, renderTaskList, localDate } from "./_digest";
+import { FREQUENCIES, isWeekBased, nextOccurrence, parseRule, zonedToUtc, type Frequency, type RecurrenceRule } from "../src/lib/recurrence";
+
 // Shared household assistant: Gemini call + server-side action execution.
 // Used by the in-app chat (/api/assistant, with the user's own token so RLS applies)
 // and by WhatsApp group commands (/api/whatsapp, with the service role scoped to one household).
@@ -5,7 +8,7 @@
 // Tested, fast models in order of preference (gemini-3.6-flash answers in ~2s)
 export const MODEL_CANDIDATES = ["gemini-3.6-flash", "gemini-flash-latest", "gemini-3-flash-preview"];
 // Per-model time limit: the whole request must finish well inside the 25s function limit
-const MODEL_TIMEOUT_MS = 10_000;
+const MODEL_TIMEOUT_MS = 8_000;
 
 type Row = Record<string, any>;
 export type AssistantAction = { type?: string; payload?: Row };
@@ -96,36 +99,6 @@ function zonedParts(date: Date, timeZone: string) {
   return { y: +map.year, m: +map.month, d: +map.day, h: +map.hour % 24, min: +map.minute, weekday: map.weekday as string };
 }
 
-/** "YYYY-MM-DD" + optional "HH:mm" in a time zone → UTC ISO */
-export function zonedToUtc(date: string, time: string | null | undefined, timeZone: string): string | null {
-  const dm = date.match(/^(\d{4})-(\d{2})-(\d{2})$/);
-  if (!dm) return null;
-  const tm = (time ?? "").match(/^(\d{1,2}):(\d{2})$/);
-  const [y, mo, d, h, mi] = [+dm[1], +dm[2], +dm[3], tm ? +tm[1] : 0, tm ? +tm[2] : 0];
-  const desired = Date.UTC(y, mo - 1, d, h, mi);
-  let guess = desired;
-  for (let i = 0; i < 3; i++) {
-    const p = zonedParts(new Date(guess), timeZone);
-    const delta = desired - Date.UTC(p.y, p.m - 1, p.d, p.h, p.min);
-    if (!delta) break;
-    guess += delta;
-  }
-  return new Date(guess).toISOString();
-}
-
-function nextOccurrence(days: number[], time: string, timeZone: string, now: Date): string | null {
-  if (!days.length) return null;
-  for (let i = 0; i <= 7; i++) {
-    const day = new Date(now.getTime() + i * 86_400_000);
-    const p = zonedParts(day, timeZone);
-    const iso = `${p.y}-${String(p.m).padStart(2, "0")}-${String(p.d).padStart(2, "0")}`;
-    const weekday = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].indexOf(p.weekday);
-    const at = zonedToUtc(iso, time, timeZone);
-    if (days.includes(weekday) && at && Date.parse(at) > now.getTime()) return at;
-  }
-  return null;
-}
-
 /* ─────────────── Data access ─────────────── */
 
 /** A PostgREST client bound to either the service role or a user's own token */
@@ -160,7 +133,7 @@ export async function loadContext(db: Db, householdId: string, now = new Date())
   const from = new Date(now.getTime() - 2 * 86_400_000).toISOString();
   const [inventory, openTasks, doneTasks, appointments, members] = await Promise.all([
     db(`inventory?${h}&select=id,name,quantity,unit,critical_threshold&order=name`),
-    db(`tasks?${h}&status=in.(todo,in_progress)&select=id,title,status,module,task_type,due_at,scheduled_start_at,assigned_to,priority_level&order=created_at.desc&limit=200`),
+    db(`tasks?${h}&status=in.(todo,in_progress)&select=id,title,status,module,task_type,due_at,scheduled_start_at,assigned_to,priority_level,description,is_recurring,recurrence_rule&order=created_at.desc&limit=200`),
     db(`tasks?${h}&status=eq.done&select=id,title,status,module,due_at,scheduled_start_at&order=updated_at.desc&limit=20`),
     db(`appointments?${h}&starts_at=gte.${from}&select=id,title,starts_at,location,provider_name,status&order=starts_at&limit=100`),
     db(`users?${h}&select=id,display_name,role`),
@@ -175,13 +148,16 @@ const ACTION_DOCS = [
   "- add_inventory_item: name (required), unit, quantity (number), critical_threshold (number), notes.",
   "- update_inventory_item: id or name (to find it), quantity (set exact number) OR quantity_delta (+/- number, e.g. bought 2 → +2, used one → -1), critical_threshold, new_name, unit.",
   "- delete_inventory_item: id or name.",
-  "- add_task: title (required), description, task_type (priority|time_sensitive), priority_level (1-5), due_date (YYYY-MM-DD), due_time (HH:mm), assignee (member display_name), is_recurring, recurrence_days (0-6 array), recurrence_time (HH:mm).",
+  "- add_task: title (required), description, task_type (priority|time_sensitive), priority_level (1-5), due_date (YYYY-MM-DD), due_time (HH:mm), assignee (member display_name). Recurring: recurrence (weekly|biweekly|monthly|bimonthly|quarterly|semiannual|yearly), recurrence_time (HH:mm); for weekly/biweekly also recurrence_days (0-6 array, 0=Sunday); for the others due_date = the first occurrence (its day of month, and month for yearly, repeats).",
   "- update_task: id or title, then any of: status (todo|in_progress|done), new_title, due_date, due_time, priority_level, assignee (member display_name, or empty string to unassign).",
   "- delete_task: id or title.",
   "- add_event: title (required), date (YYYY-MM-DD, required), time (HH:mm), provider_name, location, notes.",
   "- update_event: id or title, then any of: new_title, date, time, location, provider_name, notes, status (scheduled|completed|cancelled).",
   "- delete_event: id or title.",
   "- shift_task_schedule / shift_event_schedule: id or title, hours_delta, months_delta.",
+  "- show_shopping_list: no payload. Use when the user asks what to buy / to see the shopping list.",
+  "- show_tasks: filter (open|today|overdue|tomorrow), assignee (optional member display_name). Use when the user asks to see tasks.",
+  "With show_* actions keep the reply to a few words — the list itself is added automatically (with links); never write the list yourself.",
   "Match items by meaning, not exact spelling (\"פפסי\" → \"שישית פפסי\", \"חלב\" → \"חלב 3%\"), using the id from Inventory. Use the number the user wrote as-is, in the item's own unit (\"קניתי 6 פפסי\" → quantity_delta 6).",
   "Shopping list = inventory items whose quantity is below critical_threshold. \"Bought X\" means update_inventory_item with a positive quantity_delta; if no amount is given, use quantity_delta = max(1, critical_threshold - quantity).",
   "Shopping tasks (module=inventory) close automatically when stock is back above the minimum — prefer updating the inventory item.",
@@ -283,13 +259,14 @@ export interface ExecContext {
   timeZone: string;
   context: HouseholdContext;
   now?: Date;
+  /** App address for tap-to-open links in lists (WhatsApp); omitted in the app itself */
+  site?: string | null;
 }
 
-/** One line with what is still on the shopping list after a change */
-export async function shoppingListLine(db: Db, householdId: string): Promise<string> {
-  const items = await db<Row[]>(`inventory?household_id=eq.${householdId}&select=name,quantity,critical_threshold&order=name`);
-  const missing = items.filter((i) => Number(i.quantity) < Number(i.critical_threshold)).map((i) => i.name);
-  return missing.length ? `🛒 נשאר לקנות: ${missing.join(", ")}` : "🎉 רשימת הקניות הושלמה!";
+/** After a stock change: a celebration if nothing is left to buy, otherwise nothing (the list is shown only on request) */
+export async function shoppingCompleteLine(db: Db, householdId: string): Promise<string> {
+  const items = await db<Row[]>(`inventory?household_id=eq.${householdId}&select=quantity,critical_threshold`);
+  return items.some((i) => Number(i.quantity) < Number(i.critical_threshold)) ? "" : "🎉 רשימת הקניות הושלמה!";
 }
 
 /** Runs the assistant's actions; returns one Hebrew line per action and whether stock changed */
@@ -360,17 +337,22 @@ export async function executeActions(ctx: ExecContext, actions: AssistantAction[
           const title = String(p.title ?? "").trim();
           if (!title) break;
           const timeSensitive = p.task_type === "time_sensitive";
-          const recurring = Boolean(p.is_recurring);
-          const days = Array.isArray(p.recurrence_days) ? p.recurrence_days.map(Number).filter((d: number) => d >= 0 && d <= 6) : [];
-          const at = recurring
-            ? nextOccurrence(days, String(p.recurrence_time ?? "09:00"), timeZone, now)
+          const freq = (FREQUENCIES as string[]).includes(String(p.recurrence)) ? (p.recurrence as Frequency)
+            : p.is_recurring ? "weekly" : null;
+          const time = String(p.recurrence_time ?? p.due_time ?? "09:00");
+          const firstDate = String(p.due_date ?? localDate(now, timeZone));
+          const rule: RecurrenceRule | null = !freq ? null : isWeekBased(freq)
+            ? { freq, days: Array.isArray(p.recurrence_days) ? p.recurrence_days.map(Number).filter((d: number) => d >= 0 && d <= 6) : [], time }
+            : { freq, day: Number(firstDate.slice(8, 10)), time };
+          const at = rule
+            ? (isWeekBased(rule.freq) ? nextOccurrence(rule, timeZone, now) : zonedToUtc(firstDate, time, timeZone))
             : p.due_date ? zonedToUtc(String(p.due_date), p.due_time ? String(p.due_time) : null, timeZone) : null;
           await db("tasks", { method: "POST", body: {
             household_id: householdId, title, description: p.description ? String(p.description) : null,
             task_type: timeSensitive ? "time_sensitive" : "priority", status: "todo", module: "general", source_type: "manual",
             priority_level: timeSensitive ? null : Number(p.priority_level ?? 3),
             due_at: timeSensitive ? null : at, scheduled_start_at: timeSensitive ? at : null,
-            is_recurring: recurring, recurrence_rule: recurring ? JSON.stringify({ days, time: p.recurrence_time ?? "09:00" }) : null,
+            is_recurring: !!rule, recurrence_rule: rule ? JSON.stringify(rule) : null,
             assigned_to: memberId(p.assignee), created_by: actorId,
           } });
           lines.push(`📝 משימה חדשה: ${title}`);
@@ -391,6 +373,19 @@ export async function executeActions(ctx: ExecContext, actions: AssistantAction[
           if (!Object.keys(patch).length) break;
           await db(`tasks?id=eq.${task.id}`, { method: "PATCH", body: patch });
           lines.push(patch.status ? `✅ ${task.title} → ${STATUS_HE[patch.status]}` : `✅ עודכנה משימה: ${patch.title ?? task.title}`);
+          // Completed a recurring task → create its next occurrence (same as ticking it off in the app)
+          const rule = task.is_recurring && patch.status === "done" && task.status !== "done" ? parseRule(task.recurrence_rule) : null;
+          const next = rule ? nextOccurrence(rule, timeZone, now, task.scheduled_start_at ?? task.due_at) : null;
+          if (next) {
+            await db("tasks", { method: "POST", body: {
+              household_id: householdId, title: patch.title ?? task.title, description: task.description ?? null,
+              task_type: task.task_type, module: task.module, source_type: "recurring", status: "todo",
+              priority_level: task.priority_level, assigned_to: patch.assigned_to !== undefined ? patch.assigned_to : task.assigned_to,
+              due_at: task.task_type === "priority" ? next : null, scheduled_start_at: task.task_type === "time_sensitive" ? next : null,
+              is_recurring: true, recurrence_rule: task.recurrence_rule, created_by: actorId,
+            } });
+            lines.push(`🔁 הבאה: ${new Intl.DateTimeFormat("he-IL", { timeZone, day: "numeric", month: "numeric" }).format(new Date(next))}`);
+          }
           break;
         }
         case "delete_task": {
@@ -434,6 +429,32 @@ export async function executeActions(ctx: ExecContext, actions: AssistantAction[
           if (!ev) { lines.push(`⚠️ לא מצאתי אירוע: ${p.title ?? p.id}`); break; }
           await db(`appointments?id=eq.${ev.id}`, { method: "DELETE" });
           lines.push(`🗑️ נמחק אירוע: ${ev.title}`);
+          break;
+        }
+        case "show_shopping_list": {
+          lines.push(renderShoppingList(context.inventory as any, ctx.site ?? null));
+          break;
+        }
+        case "show_tasks": {
+          const today = localDate(now, timeZone);
+          const tomorrow = localDate(new Date(now.getTime() + 86_400_000), timeZone);
+          const day = (t: Row) => {
+            const at = t.scheduled_start_at ?? t.due_at;
+            return at ? localDate(at, timeZone) : null;
+          };
+          const who = memberId(p.assignee);
+          const filter = String(p.filter ?? "open");
+          const open = context.tasks
+            .filter((t) => t.status !== "done" && t.status !== "cancelled" && t.module !== "inventory")
+            .filter((t) => !who || t.assigned_to === who)
+            .filter((t) => filter === "today" ? day(t) === today
+              : filter === "tomorrow" ? day(t) === tomorrow
+              : filter === "overdue" ? !!day(t) && day(t)! < today
+              : true)
+            .sort((a, b) => String(a.scheduled_start_at ?? a.due_at ?? "9999").localeCompare(String(b.scheduled_start_at ?? b.due_at ?? "9999")));
+          const title = { today: "✅ *משימות להיום*", tomorrow: "🔜 *משימות למחר*", overdue: "⚠️ *משימות באיחור*" }[filter] ?? "📋 *משימות פתוחות*";
+          const members = Object.fromEntries(context.members.map((m) => [m.id, m.display_name]));
+          lines.push(renderTaskList(title, open as any, members, timeZone, ctx.site ?? null));
           break;
         }
         case "shift_task_schedule":

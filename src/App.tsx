@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import { Routes, Route, Navigate, useNavigate } from "react-router-dom";
+import { Routes, Route, Navigate, useNavigate, useParams } from "react-router-dom";
 import { useAuth } from "./contexts/AuthContext";
 import { useProfile } from "./hooks/useProfile";
 import { useThemeStore } from "./state/stores/themeStore";
@@ -18,6 +18,16 @@ import Settings from "./pages/Settings";
 import Trips from "./pages/Trips";
 import TripDetail from "./pages/TripDetail";
 import WhatsApp from "./pages/WhatsApp";
+
+/** Short links used in WhatsApp messages: /t/<taskId> and /b/<inventoryItemId> */
+function TaskLink() {
+  const { id } = useParams();
+  return <Navigate to={`/tasks?open=${id}`} replace />;
+}
+function BuyLink() {
+  const { id } = useParams();
+  return <Navigate to={`/tasks?scope=shopping&buy=${id}`} replace />;
+}
 
 function AppRoutes() {
   const { user, loading: authLoading, isRecovery, clearRecovery } = useAuth();
@@ -62,6 +72,8 @@ function AppRoutes() {
         <Route path="/weekly" element={<Weekly />} />
         <Route path="/assistant" element={<Assistant />} />
         <Route path="/tasks" element={<Tasks />} />
+        <Route path="/t/:id" element={<TaskLink />} />
+        <Route path="/b/:id" element={<BuyLink />} />
         <Route path="/inventory" element={<Inventory />} />
         <Route path="/baby" element={<Baby />} />
         <Route path="/finance" element={<Finance />} />

@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import Icon from "../components/Icon";
 import { formatInTimeZone } from "../lib/datetime";
+import { useHouseholdSettings } from "../hooks/useHouseholdSettings";
 import {
   DEFAULT_SETTINGS, useWhatsapp, whatsappAction,
   type SummarySection, type WeeklySection, type WhatsappLogEntry, type WhatsappMessage,
@@ -182,6 +183,18 @@ export default function WhatsApp() {
   const [notice, setNotice] = useState<{ ok: boolean; text: string } | null>(null);
   const [openLog, setOpenLog] = useState<string | null>(null);
   const [connecting, setConnecting] = useState(false);
+  const { data: householdSettings, setAssistantModelForHousehold } = useHouseholdSettings();
+  const models = useQuery({
+    queryKey: ["assistant_models"],
+    queryFn: async () => {
+      const res = await fetch("/api/assistant");
+      const data = (await res.json()) as { models?: string[]; recommendedModel?: string };
+      return { models: data.models ?? [], recommended: data.recommendedModel ?? "" };
+    },
+    staleTime: 10 * 60_000,
+    retry: false,
+  });
+  const familyModel = householdSettings?.assistant_model || "";
   const connectListening = async () => {
     setConnecting(true);
     try {
@@ -414,6 +427,17 @@ export default function WhatsApp() {
             </div>
             <Toggle label="זיהוי קניות אוטומטי" on={s.purchase_detection} onChange={(v) => saveSettings.mutate({ purchase_detection: v })} />
           </div>
+          <label className="text-xs text-theme-muted block mb-1" htmlFor="wa-model">מודל AI (משותף לכל המשפחה, גם לצ'אט באפליקציה)</label>
+          <select id="wa-model" value={familyModel}
+            onChange={(e) => setAssistantModelForHousehold.mutate(e.target.value, {
+              onSuccess: () => flash(true, e.target.value ? `המודל עודכן: ${e.target.value}` : "חזרה לבחירה אוטומטית"),
+              onError: (err) => flash(false, err instanceof Error ? err.message : "שמירת המודל נכשלה"),
+            })}
+            className="input-base w-full mb-1" dir="ltr">
+            <option value="">אוטומטי ({models.data?.recommended || "gemini-3.6-flash"})</option>
+            {Array.from(new Set([familyModel, ...(models.data?.models ?? [])].filter(Boolean))).map((m) => <option key={m} value={m}>{m}</option>)}
+          </select>
+          <p className="text-[11px] text-theme-muted mb-4">אם המודל שנבחר לא עונה תוך 8 שניות, עוברים אוטומטית למודל ברירת המחדל.</p>
           <label className="text-xs text-theme-muted block mb-1" htmlFor="trigger">מילת הפעלה</label>
           <input id="trigger" defaultValue={s.assistant_trigger} key={s.assistant_trigger}
             onBlur={(e) => e.target.value.trim() && e.target.value.trim() !== s.assistant_trigger && saveSettings.mutate({ assistant_trigger: e.target.value.trim() })}

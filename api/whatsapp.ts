@@ -55,6 +55,10 @@ type Settings = {
   purchase_detection: boolean;
   shopping_filter: "low" | "at_or_below" | "out";
   shopping_show_missing: boolean;
+  tasks_filter: "all" | "high" | "assigned";
+  tasks_show_assignee: boolean;
+  events_show_details: boolean;
+  activity_detection: boolean;
 };
 type Kind = "daily" | "weekly" | "custom" | "reminder" | "manual" | "assistant";
 type CustomMessage = { id: string; text: string; weekdays: number[]; send_time: string; last_sent_on: string | null };
@@ -131,7 +135,7 @@ async function buildSummary(kind: "daily" | "weekly", s: Settings, now: Date, ov
   const from = new Date(now.getTime() - 86_400_000).toISOString();
   const to = new Date(now.getTime() + (kind === "weekly" ? 9 : 3) * 86_400_000).toISOString();
   const [tasks, events, inventory, users] = await Promise.all([
-    db<DigestTask[]>(`tasks?${h}&status=in.(todo,in_progress)&select=id,title,status,module,due_at,scheduled_start_at,assigned_to`),
+    db<DigestTask[]>(`tasks?${h}&status=in.(todo,in_progress)&select=id,title,status,module,due_at,scheduled_start_at,assigned_to,priority_level,task_type`),
     db<DigestEvent[]>(`appointments?${h}&starts_at=gte.${from}&starts_at=lt.${to}&select=title,starts_at,location,provider_name,status`),
     db<DigestStockItem[]>(`inventory?${h}&select=id,name,quantity,critical_threshold,unit`),
     db<{ id: string; display_name: string }[]>(`users?${h}&select=id,display_name`),
@@ -140,6 +144,7 @@ async function buildSummary(kind: "daily" | "weekly", s: Settings, now: Date, ov
     now, timeZone: s.time_zone, tasks, events, inventory, site: siteUrl(),
     members: Object.fromEntries(users.map((u) => [u.id, u.display_name])),
     shoppingFilter: s.shopping_filter ?? "low", showMissing: !!s.shopping_show_missing,
+    tasksFilter: s.tasks_filter ?? "all", showAssignee: s.tasks_show_assignee !== false, showEventDetails: s.events_show_details !== false,
   };
   return kind === "weekly"
     ? buildWeekly({ ...base, sections: overrides.sections ?? s.weekly_sections, greeting: overrides.greeting !== undefined ? overrides.greeting : s.weekly_greeting })
@@ -258,6 +263,7 @@ async function settingsFor(householdId: string): Promise<Settings> {
     weekly_enabled: false, weekly_day: 6, weekly_time: "20:00:00", weekly_sections: {}, weekly_greeting: null, last_weekly_sent_on: null,
     assistant_enabled: true, assistant_trigger: "פאמי", purchase_detection: true,
     shopping_filter: "low", shopping_show_missing: false,
+    tasks_filter: "all", tasks_show_assignee: true, events_show_details: true, activity_detection: true,
   };
 }
 
@@ -309,6 +315,21 @@ export function commandText(text: string, trigger: string): string | null {
 // "קניתי", "וקנינו", "הבאתי"… — a past-tense report of buying (not "צריך לקנות")
 const PURCHASE_WORDS = new Set(["קניתי", "קנינו", "קנתה", "קנית", "הבאתי", "הבאנו", "לקחתי", "bought"]);
 
+// "סיימתי", "שילמנו", "ביטלנו", "דחינו"… — reports of progress on a task or event
+const ACTIVITY_WORDS = new Set([
+  "סיימתי", "סיימנו", "עשיתי", "עשינו", "שילמתי", "שילמנו", "ביצעתי", "ביצענו", "טיפלתי", "טיפלנו",
+  "הזמנתי", "הזמנו", "קבעתי", "קבענו", "הגשתי", "הגשנו", "ביטלתי", "ביטלנו", "בוטל", "בוטלה",
+  "דחיתי", "דחינו", "נדחה", "נדחתה", "הזזתי", "הזזנו", "העברתי", "העברנו", "התקשרתי", "סגרתי", "סגרנו",
+]);
+
+/** True when a casual group message reports progress on a task/event (done, paid, cancelled, postponed…) */
+export function mentionsActivity(text: string): boolean {
+  return text
+    .toLowerCase()
+    .split(/[^\p{L}]+/u)
+    .some((word) => ACTIVITY_WORDS.has(word) || ACTIVITY_WORDS.has(word.replace(/^(ו|ש|כש)/, "")));
+}
+
 /** True when a casual group message reports a purchase, so it can update stock without the trigger word */
 export function mentionsPurchase(text: string): boolean {
   return text
@@ -331,9 +352,11 @@ async function handleWebhook(event: GreenWebhook) {
   if (!s.enabled) return "ignored: messages switched off";
   if (!s.assistant_enabled) return "ignored: group commands switched off";
   const command = commandText(text, s.assistant_trigger || "פאמי");
-  // Without the trigger word, only purchase reports are handled (and only if they touch the stock)
+  // Without the trigger word, only purchase / progress reports are handled (and only if they change something)
   const purchase = command === null && s.purchase_detection !== false && mentionsPurchase(text);
-  if (command === null && !purchase) return "ignored: no trigger";
+  const activity = command === null && !purchase && s.activity_detection !== false && mentionsActivity(text);
+  const casual = purchase || activity;
+  if (command === null && !casual) return "ignored: no trigger";
 
   // Process each WhatsApp message once (Green API retries webhooks it thinks failed)
   const claimed = await fetch(`${supabaseUrl()}/rest/v1/whatsapp_inbox`, {
@@ -370,26 +393,28 @@ async function handleWebhook(event: GreenWebhook) {
     const answer = await askAssistant({
       apiKey, message: command ?? text, context, timeZone: s.time_zone, sender: senderName, channel: "whatsapp",
       model: familySettings?.assistant_model || null,
-      mode: purchase ? "purchase" : "command",
+      mode: purchase ? "purchase" : activity ? "activity" : "command",
     });
-    // A purchase report may only update stock, never add/delete/edit anything else
-    const actions = purchase ? answer.actions.filter((a) => a.type === "update_inventory_item") : answer.actions;
-    const { lines, inventoryChanged } = await executeActions(
+    // Casual messages may only update existing rows, never create or delete anything
+    const allowed = purchase ? ["update_inventory_item"]
+      : activity ? ["update_task", "update_event", "shift_task_schedule", "shift_event_schedule"] : null;
+    const actions = allowed ? answer.actions.filter((a) => allowed.includes(String(a.type))) : answer.actions;
+    const { lines, inventoryChanged, changed } = await executeActions(
       { db: serviceDb, householdId: s.household_id, actorId: actor.id, timeZone: s.time_zone, context, site: siteUrl() }, actions);
-    // Stay silent when a casual "קניתי…" wasn't about anything we track
-    if (purchase && !inventoryChanged) return "ignored: purchase not in stock";
+    // Stay silent when a casual message ("קניתי…", "סיימתי…") wasn't about anything we track
+    if (casual && !changed) return purchase ? "ignored: purchase not in stock" : "ignored: no matching task or event";
     reply = [
       answer.reply,
-      ...(purchase ? lines.filter((l) => !l.startsWith("⚠️")) : lines),
+      ...(casual ? lines.filter((l) => !l.startsWith("⚠️")) : lines),
       // The full list only on request ("מה צריך לקנות?"); after an update just celebrate an empty list
       inventoryChanged ? await shoppingCompleteLine(serviceDb, s.household_id) : "",
     ].filter(Boolean).join("\n");
   } catch (e) {
-    if (purchase) return "ignored: purchase error";
+    if (casual) return "ignored: casual message error";
     reply = `לא הצלחתי כרגע 😕 ${e instanceof Error ? e.message.slice(0, 120) : ""}`;
   }
   await send(s.household_id, chatId, "assistant", reply, event.idMessage);
-  return purchase ? "purchase recorded" : "answered";
+  return purchase ? "purchase recorded" : activity ? "activity recorded" : "answered";
 }
 
 export default async function handler(req: Request): Promise<Response> {

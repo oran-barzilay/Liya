@@ -27,6 +27,10 @@ export interface WhatsappSettings {
   purchase_detection: boolean;
   shopping_filter: "low" | "at_or_below" | "out";
   shopping_show_missing: boolean;
+  tasks_filter: "all" | "high" | "assigned";
+  tasks_show_assignee: boolean;
+  events_show_details: boolean;
+  activity_detection: boolean;
 }
 
 export interface WhatsappMessage {
@@ -68,6 +72,10 @@ export const DEFAULT_SETTINGS: Omit<WhatsappSettings, "household_id"> = {
   purchase_detection: true,
   shopping_filter: "low",
   shopping_show_missing: false,
+  tasks_filter: "all",
+  tasks_show_assignee: true,
+  events_show_details: true,
+  activity_detection: true,
 };
 
 /** Calls the server endpoint as the signed-in user */

@@ -381,6 +381,41 @@ export default function WhatsApp() {
         </div>
       </Card>
 
+      {/* Tasks and events in the summaries */}
+      <Card title="משימות ואירועים בסיכומים" icon="tasks">
+        <p className="text-xs text-theme-muted mb-3">אילו משימות יופיעו בסיכום היומי והשבועי, ואילו פרטים.</p>
+        <div className="grid grid-cols-3 gap-2 mb-4">
+          {([
+            ["all", "כל המשימות", "כל מה שפתוח"],
+            ["high", "דחופות וגבוהות", "כולל מתוזמנות"],
+            ["assigned", "רק עם אחראי", "משימות ששויכו"],
+          ] as const).map(([value, label, hint]) => (
+            <button key={value} type="button" onClick={() => saveSettings.mutate({ tasks_filter: value })}
+              className={"rounded-xl border px-2 py-2.5 text-center transition-colors " +
+                (s.tasks_filter === value ? "bg-accent-600 border-accent-600 text-white" : "border-slate-700 text-theme-muted hover:text-theme")}>
+              <div className="text-sm font-medium">{label}</div>
+              <div className="text-[11px] opacity-80 mt-0.5">{hint}</div>
+            </button>
+          ))}
+        </div>
+        <div className="space-y-3">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <div className="text-sm text-theme">להראות מי אחראי</div>
+              <div className="text-xs text-theme-muted">לדוגמה: איסוף מהגן — לינוי</div>
+            </div>
+            <Toggle label="להראות מי אחראי" on={s.tasks_show_assignee} onChange={(v) => saveSettings.mutate({ tasks_show_assignee: v })} />
+          </div>
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <div className="text-sm text-theme">פרטי אירועים</div>
+              <div className="text-xs text-theme-muted">מיקום ואיש קשר, לדוגמה: חיסון (טיפת חלב, רמת גן)</div>
+            </div>
+            <Toggle label="פרטי אירועים" on={s.events_show_details} onChange={(v) => saveSettings.mutate({ events_show_details: v })} />
+          </div>
+        </div>
+      </Card>
+
       {/* Shopping list in the summaries */}
       <Card title="רשימת קניות בסיכומים" icon="package">
         <p className="text-xs text-theme-muted mb-3">אילו מוצרים יופיעו תחת "לקנות" בסיכום היומי והשבועי.</p>
@@ -452,6 +487,15 @@ export default function WhatsApp() {
               </div>
             </div>
             <Toggle label="זיהוי קניות אוטומטי" on={s.purchase_detection} onChange={(v) => saveSettings.mutate({ purchase_detection: v })} />
+          </div>
+          <div className="flex items-start justify-between gap-3 rounded-xl bg-slate-800 px-4 py-3 mb-4">
+            <div>
+              <div className="text-sm text-theme font-medium">זיהוי עדכוני משימות ואירועים</div>
+              <div className="text-xs text-theme-muted mt-0.5">
+                "סיימתי את הארנונה", "דחינו את התור ליום חמישי" — מעדכן ועונה מה השתנה (לפני → אחרי), גם בלי מילת ההפעלה. הודעות שלא תואמות משימה או אירוע לא יקבלו תשובה.
+              </div>
+            </div>
+            <Toggle label="זיהוי עדכוני משימות ואירועים" on={s.activity_detection} onChange={(v) => saveSettings.mutate({ activity_detection: v })} />
           </div>
           <label className="text-xs text-theme-muted block mb-1" htmlFor="wa-model">מודל AI (משותף לכל המשפחה, גם לצ'אט באפליקציה)</label>
           <select id="wa-model" value={familyModel}

@@ -9,6 +9,8 @@ export interface DigestTask {
   due_at: string | null;
   scheduled_start_at: string | null;
   assigned_to: string | null;
+  priority_level?: number | null;
+  task_type?: string | null;
 }
 export interface DigestEvent {
   title: string;
@@ -44,7 +46,20 @@ export interface DigestInput {
   shoppingFilter?: ShoppingFilter;
   /** Write how much is missing next to each product */
   showMissing?: boolean;
+  /** Which tasks to list: all (default), only urgent/high priority (incl. scheduled), or only assigned ones */
+  tasksFilter?: TasksFilter;
+  /** Show who is responsible for each task (default true) */
+  showAssignee?: boolean;
+  /** Show the provider / location of events (default true) */
+  showEventDetails?: boolean;
 }
+
+export type TasksFilter = "all" | "high" | "assigned";
+
+const taskMatches = (t: DigestTask, filter: TasksFilter = "all") =>
+  filter === "high" ? t.task_type === "time_sensitive" || (t.priority_level != null && t.priority_level <= 2)
+  : filter === "assigned" ? !!t.assigned_to
+  : true;
 
 export type ShoppingFilter = "low" | "at_or_below" | "out";
 
@@ -98,12 +113,13 @@ function prepare(input: Omit<DigestInput, "sections" | "greeting">) {
   const { timeZone, members } = input;
   const site = input.site || null;
   const today = localDate(input.now, timeZone);
-  const tasks = input.tasks.filter((t) => OPEN(t) && EVERYDAY(t) && when(t));
+  const tasks = input.tasks.filter((t) => OPEN(t) && EVERYDAY(t) && when(t) && taskMatches(t, input.tasksFilter));
   const events = input.events.filter((e) => e.status !== "cancelled");
+  const showAssignee = input.showAssignee !== false;
   const taskLine = (t: DigestTask) => {
     // Date-only tasks are stored at local midnight: no time prefix
     const time = t.scheduled_start_at && hhmm(t.scheduled_start_at, timeZone) !== "00:00" ? `${hhmm(t.scheduled_start_at, timeZone)} ` : "";
-    const who = t.assigned_to && members[t.assigned_to] ? ` — ${members[t.assigned_to]}` : "";
+    const who = showAssignee && t.assigned_to && members[t.assigned_to] ? ` — ${members[t.assigned_to]}` : "";
     return `• ${time}${t.title}${who}${site && t.id ? `\n   ${links.task(site, t.id)}` : ""}`;
   };
   const shoppingItems = input.inventory.filter((i) => inShoppingList(i, input.shoppingFilter));
@@ -126,7 +142,7 @@ function prepare(input: Omit<DigestInput, "sections" | "greeting">) {
     shopping: shoppingItems.map(shoppingName),
     taskLine,
     eventLine: (e: DigestEvent) => {
-      const extra = [e.provider_name, e.location].filter(Boolean).join(", ");
+      const extra = input.showEventDetails === false ? "" : [e.provider_name, e.location].filter(Boolean).join(", ");
       return `• ${hhmm(e.starts_at, timeZone)} ${e.title}${extra ? ` (${extra})` : ""}`;
     },
     /** A task section: header + (capped) task lines */
@@ -239,4 +255,15 @@ export function renderTaskList(title: string, tasks: DigestTask[], members: Reco
     return p.taskLine(t).replace(/^(• [^\n]*)/, `$1${date}`);
   });
   return [title, ...capped(lines, site ? links.tasks(site) : null)].join("\n");
+}
+
+/** "What's on this week?" — events (capped), with a link to the weekly planner */
+export function renderEventList(title: string, events: DigestEvent[], timeZone: string, site: string | null, showDetails = true): string {
+  const upcoming = events.filter((e) => e.status !== "cancelled").sort((a, b) => a.starts_at.localeCompare(b.starts_at));
+  if (!upcoming.length) return `${title}\nאין אירועים 🌴`;
+  const lines = upcoming.map((e) => {
+    const extra = showDetails ? [e.provider_name, e.location].filter(Boolean).join(", ") : "";
+    return `• ${weekdayName(localDate(e.starts_at, timeZone))} ${ddmm(localDate(e.starts_at, timeZone))} ${hhmm(e.starts_at, timeZone)} ${e.title}${extra ? ` (${extra})` : ""}`;
+  });
+  return [title, ...capped(lines, site ? `${site}/weekly` : null)].join("\n");
 }

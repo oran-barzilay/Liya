@@ -1,4 +1,4 @@
-import { renderShoppingList, renderTaskList, localDate } from "./_digest";
+import { renderEventList, renderShoppingList, renderTaskList, localDate } from "./_digest";
 import { FREQUENCIES, firstOccurrence, nextOccurrence, parseRule, zonedToUtc, type Frequency, type RecurrenceRule } from "../src/lib/recurrence";
 
 // Shared household assistant: Gemini call + server-side action execution.
@@ -157,6 +157,7 @@ const ACTION_DOCS = [
   "- shift_task_schedule / shift_event_schedule: id or title, hours_delta, months_delta.",
   "- show_shopping_list: no payload. Use when the user asks what to buy / to see the shopping list.",
   "- show_tasks: filter (open|today|overdue|tomorrow), assignee (optional member display_name). Use when the user asks to see tasks.",
+  "- show_events: range (today|tomorrow|week). Use when the user asks about upcoming events / the calendar.",
   "With show_* actions keep the reply to a few words — the list itself is added automatically (with links); never write the list yourself.",
   "Match items by meaning, not exact spelling (\"פפסי\" → \"שישית פפסי\", \"חלב\" → \"חלב 3%\"), using the id from Inventory. Use the number the user wrote as-is, in the item's own unit (\"קניתי 6 פפסי\" → quantity_delta 6).",
   "Shopping list = inventory items whose quantity is below critical_threshold. \"Bought X\" means update_inventory_item with a positive quantity_delta; if no amount is given, use quantity_delta = max(1, critical_threshold - quantity).",
@@ -173,8 +174,8 @@ export async function askAssistant(opts: {
   model?: string | null;
   sender?: string | null;
   channel: "app" | "whatsapp";
-  /** "purchase": a casual group message that mentions buying — only stock updates, silence otherwise */
-  mode?: "command" | "purchase";
+  /** "purchase" / "activity": a casual group message (no trigger word) — only matching updates, silence otherwise */
+  mode?: "command" | "purchase" | "activity";
   now?: Date;
 }): Promise<{ reply: string; actions: AssistantAction[] }> {
   const now = opts.now ?? new Date();
@@ -192,6 +193,11 @@ export async function askAssistant(opts: {
         + "Only if it reports items that were bought and that exist in Inventory, emit update_inventory_item with a positive quantity_delta for each, "
         + "and a very short thanks as the reply. Emit no other action types. If it is a question, a request (\"צריך לקנות\"), or about things not in Inventory, "
         + "return {\"reply\": \"\", \"actions\": []}."
+      : opts.mode === "activity"
+      ? "ACTIVITY MODE: this is an ordinary family chat message (not addressed to you) that may report progress on a task or event "
+        + "(done / paid / cancelled / postponed / moved / who will do it). Only if it clearly refers to a task or event that exists in context, "
+        + "emit update_task (status, due_date/due_time, assignee), update_event (date, time, status, location) or shift_* for it, and a very short reply. "
+        + "Never create or delete anything. If it doesn't clearly match an existing task or event, return {\"reply\": \"\", \"actions\": []}."
       : "",
     "Return ONLY valid JSON, no markdown: {\"reply\": string, \"actions\": [{\"type\": string, \"payload\": object}]}",
     ACTION_DOCS,
@@ -270,11 +276,21 @@ export async function shoppingCompleteLine(db: Db, householdId: string): Promise
 }
 
 /** Runs the assistant's actions; returns one Hebrew line per action and whether stock changed */
-export async function executeActions(ctx: ExecContext, actions: AssistantAction[]): Promise<{ lines: string[]; inventoryChanged: boolean }> {
+export async function executeActions(ctx: ExecContext, actions: AssistantAction[]): Promise<{ lines: string[]; inventoryChanged: boolean; changed: boolean }> {
   const { db, householdId, actorId, timeZone, context } = ctx;
   const now = ctx.now ?? new Date();
   const lines: string[] = [];
   let inventoryChanged = false;
+  // Any successful change (used to stay silent on casual messages that changed nothing)
+  let changed = false;
+  const memberName = (id: unknown) => context.members.find((m) => m.id === id)?.display_name ?? "ללא";
+  /** "10.11" for date-only values, "10.11 09:00" otherwise */
+  const when = (iso: string | null | undefined) => {
+    if (!iso) return "ללא תאריך";
+    const z = zonedParts(new Date(iso), timeZone);
+    const date = `${String(z.d).padStart(2, "0")}.${String(z.m).padStart(2, "0")}`;
+    return z.h || z.min ? `${date} ${String(z.h).padStart(2, "0")}:${String(z.min).padStart(2, "0")}` : date;
+  };
   const memberId = (name: unknown) => {
     const n = norm(name);
     return n ? context.members.find((m) => norm(m.display_name) === n || norm(m.display_name).startsWith(n))?.id ?? null : null;
@@ -357,6 +373,7 @@ export async function executeActions(ctx: ExecContext, actions: AssistantAction[
             is_recurring: !!rule, recurrence_rule: rule ? JSON.stringify(rule) : null,
             assigned_to: memberId(p.assignee), created_by: actorId,
           } });
+          changed = true;
           lines.push(`📝 משימה חדשה: ${title}`);
           break;
         }
@@ -374,7 +391,17 @@ export async function executeActions(ctx: ExecContext, actions: AssistantAction[
           }
           if (!Object.keys(patch).length) break;
           await db(`tasks?id=eq.${task.id}`, { method: "PATCH", body: patch });
-          lines.push(patch.status ? `✅ ${task.title} → ${STATUS_HE[patch.status]}` : `✅ עודכנה משימה: ${patch.title ?? task.title}`);
+          changed = true;
+          // Before → after for everything that changed
+          const dateField = task.task_type === "time_sensitive" ? "scheduled_start_at" : "due_at";
+          const changes = [
+            patch.status && `${STATUS_HE[task.status] ?? task.status} → ${STATUS_HE[patch.status]}`,
+            patch[dateField] !== undefined && `📅 ${when(task[dateField])} → ${when(patch[dateField])}`,
+            patch.assigned_to !== undefined && `👤 ${memberName(task.assigned_to)} → ${memberName(patch.assigned_to)}`,
+            patch.priority_level !== undefined && `עדיפות ${task.priority_level ?? "-"} → ${patch.priority_level}`,
+            patch.title && `שם חדש: ${patch.title}`,
+          ].filter(Boolean);
+          lines.push(`✅ עדכנתי את ${task.title}: ${changes.join(" · ")}`);
           // Completed a recurring task → create its next occurrence (same as ticking it off in the app)
           const rule = task.is_recurring && patch.status === "done" && task.status !== "done" ? parseRule(task.recurrence_rule) : null;
           const next = rule ? nextOccurrence(rule, timeZone, now, task.scheduled_start_at ?? task.due_at) : null;
@@ -394,6 +421,7 @@ export async function executeActions(ctx: ExecContext, actions: AssistantAction[
           const task = findRow(context.tasks, p, "title");
           if (!task) { lines.push(`⚠️ לא מצאתי משימה: ${p.title ?? p.id}`); break; }
           await db(`tasks?id=eq.${task.id}`, { method: "DELETE" });
+          changed = true;
           lines.push(`🗑️ נמחקה משימה: ${task.title}`);
           break;
         }
@@ -406,6 +434,7 @@ export async function executeActions(ctx: ExecContext, actions: AssistantAction[
             provider_name: p.provider_name ? String(p.provider_name) : null, location: p.location ? String(p.location) : null,
             notes: p.notes ? String(p.notes) : null, status: "scheduled", created_by: actorId,
           } });
+          changed = true;
           lines.push(`📅 אירוע חדש: ${title}`);
           break;
         }
@@ -423,14 +452,37 @@ export async function executeActions(ctx: ExecContext, actions: AssistantAction[
           for (const k of ["location", "provider_name", "notes", "status"] as const) if (p[k] !== undefined) patch[k] = p[k] || null;
           if (!Object.keys(patch).length) break;
           await db(`appointments?id=eq.${ev.id}`, { method: "PATCH", body: patch });
-          lines.push(`✅ עודכן אירוע: ${patch.title ?? ev.title}`);
+          changed = true;
+          const EVENT_STATUS: Record<string, string> = { scheduled: "מתוכנן", completed: "התקיים", cancelled: "בוטל" };
+          const changes = [
+            patch.starts_at && `${when(ev.starts_at)} → ${when(patch.starts_at)}`,
+            patch.status !== undefined && `${EVENT_STATUS[ev.status] ?? ev.status} → ${EVENT_STATUS[patch.status] ?? patch.status}`,
+            patch.location !== undefined && `📍 ${ev.location || "ללא"} → ${patch.location || "ללא"}`,
+            patch.provider_name !== undefined && `${ev.provider_name || "ללא"} → ${patch.provider_name || "ללא"}`,
+            patch.title && `שם חדש: ${patch.title}`,
+            patch.notes !== undefined && "עודכנו הערות",
+          ].filter(Boolean);
+          lines.push(`📅 עדכנתי את ${ev.title}: ${changes.join(" · ")}`);
           break;
         }
         case "delete_event": {
           const ev = findRow(context.appointments, p, "title");
           if (!ev) { lines.push(`⚠️ לא מצאתי אירוע: ${p.title ?? p.id}`); break; }
           await db(`appointments?id=eq.${ev.id}`, { method: "DELETE" });
+          changed = true;
           lines.push(`🗑️ נמחק אירוע: ${ev.title}`);
+          break;
+        }
+        case "show_events": {
+          const range = String(p.range ?? "week");
+          const span = range === "today" ? 1 : range === "tomorrow" ? 2 : 7;
+          const days = Array.from({ length: span }, (_, i) => localDate(new Date(now.getTime() + i * 86_400_000), timeZone));
+          const picked = context.appointments.filter((e) => {
+            const d = localDate(e.starts_at, timeZone);
+            return range === "tomorrow" ? d === days[1] : days.includes(d);
+          });
+          const title = { today: "📅 *אירועים היום*", tomorrow: "📅 *אירועים מחר*" }[range] ?? "📅 *אירועים השבוע*";
+          lines.push(renderEventList(title, picked as any, timeZone, ctx.site ?? null));
           break;
         }
         case "show_shopping_list": {
@@ -468,7 +520,8 @@ export async function executeActions(ctx: ExecContext, actions: AssistantAction[
           const shifted = current ? shiftIso(current, Number(p.hours_delta ?? 0) || 0, Number(p.months_delta ?? 0) || 0) : null;
           if (!row || !shifted) { lines.push(`⚠️ לא מצאתי מה להזיז: ${p.title ?? p.id}`); break; }
           await db(`${isTask ? "tasks" : "appointments"}?id=eq.${row.id}`, { method: "PATCH", body: { [field]: shifted } });
-          lines.push(`🕒 הוזז: ${row.title}`);
+          changed = true;
+          lines.push(`🕒 ${row.title}: ${when(current)} → ${when(shifted)}`);
           break;
         }
       }
@@ -476,5 +529,5 @@ export async function executeActions(ctx: ExecContext, actions: AssistantAction[
       lines.push(`❌ ${action.type}: ${e instanceof Error ? e.message.slice(0, 120) : "שגיאה"}`);
     }
   }
-  return { lines, inventoryChanged };
+  return { lines, inventoryChanged, changed: changed || inventoryChanged };
 }
